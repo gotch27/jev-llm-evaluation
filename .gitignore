@@ -1,0 +1,6 @@
+# macOS metadata
+.DS_Store
+
+# Obsidian's per-device workspace layouts
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
