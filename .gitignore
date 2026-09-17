@@ -4,3 +4,6 @@
 # Obsidian's per-device workspace layouts
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
+
+# JetBrains editor settings
+.idea/

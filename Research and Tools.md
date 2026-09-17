@@ -17,6 +17,6 @@ Record what we use, its version, why we chose it, and any relevant limitations o
 
 ## Setup and reproducibility
 
-The vault uses a local Git repository to preserve note history. Commit meaningful changes; macOS metadata and Obsidian workspace layouts are ignored. Keep the future research/code repository separate and link it here. No remote is configured yet.
+The vault uses a local Git repository to preserve note history. Create commits or push changes only with Gorazd's explicit authorization; permission to edit notes does not include either action. macOS metadata, Obsidian workspace layouts, and `.idea/` editor settings are ignored. Keep research code in a separate repository and link it here.
 
 Link the code repository and record environment details and commands needed to reproduce the work. Keep credentials out of these notes.

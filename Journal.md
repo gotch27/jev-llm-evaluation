@@ -2,13 +2,11 @@
 
 [[Thesis Home|← Thesis home]]
 
-Use dated entries to retain decisions and their reasons, mentor feedback, and useful progress notes. Link related research or experiments instead of duplicating them.
-
-## Open questions
+Use authorized dated entries to retain decisions and their reasons, mentor feedback, and meaningful changes. Keep current open questions in [[Plan#Open questions]]. Link related research or experiments instead of duplicating them.
 
 ## Dated entries
 
-Add entries newest first. Include the date, what changed or was discussed, and any follow-up actions.
+Add entries newest first when Gorazd authorizes saving them. Include the date, the agreed decision or change, its reason, and any approved follow-up actions.
 
 ### 2026-09-17 — Version control for the vault
 

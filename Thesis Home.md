@@ -1,18 +1,16 @@
 # Graduate thesis — Jev
 
-Current direction from the proposal discussion: explore Jev (TypeSafe AI's “System One” model), compare it with large language models on concrete tasks, and investigate when each approach—or a combination—is useful. The proposed comparison includes accuracy, speed, and cost; the detailed scope is still to be planned.
+This vault holds the reviewed and authorized context of a graduate thesis exploring Jev and its capabilities through evaluation, comparison with large language models (LLMs), and experiments.
 
 ## Workspace
 
-- [[Plan]] — research questions, thesis outline, evaluation approach, and milestones.
+- [[Plan]] — research questions, scope, thesis outline, evaluation approach, milestones, and approved open questions.
 - [[Research and Tools]] — sources, reading notes, frameworks, and setup details.
 - [[Experiments]] — experiment designs, run records, results, and interpretation.
-- [[Journal]] — dated decisions, mentor feedback, and open questions.
+- [[Journal]] — dated decisions, their rationale, mentor feedback, and meaningful changes.
 
-Start with [[Plan]]. Keep everything in these notes until a topic or experiment becomes large enough to need its own note. Link code, datasets, and raw outputs from their actual locations.
+Start with [[Plan]]. Discuss ideas in chat and update the vault only when Gorazd authorizes saving the agreed material. Keep the structure flat and link code, datasets, and raw outputs from their actual locations.
 
 ## Context
 
 - [Original proposal discussion](thread://01a0ac0a-3db2-78e1-a7e6-bb3f7eaf7bff?hostId=local)
-
-This is the initial documentation structure, not a finalized research plan.

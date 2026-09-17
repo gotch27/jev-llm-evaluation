@@ -2,7 +2,7 @@
 
 [[Thesis Home|← Thesis home]]
 
-Use this note to shape the thesis before implementation. Sections are placeholders to work through together.
+This note records the plan reviewed and approved by Gorazd. Develop proposals in chat and save them here only when authorized. Keep approved current open questions here, with dated decision history in [[Journal]].
 
 ## Research questions and scope
 
@@ -11,3 +11,5 @@ Use this note to shape the thesis before implementation. Sections are placeholde
 ## Evaluation approach
 
 ## Milestones and next actions
+
+## Open questions
