@@ -6,12 +6,18 @@ This note indexes use cases and provides the shared experiment-record format. No
 
 ## Use cases
 
-Direction clarified on 2026-09-18: discuss TypeSafe's published evaluations as background before presenting our independent experiments. The following notes document TypeSafe's work; our own tasks and configurations remain to be chosen.
+Direction clarified on 2026-09-18: discuss TypeSafe's published evaluations as background before presenting our independent experiments.
+
+### TypeSafe's published evaluations
 
 - [[Use Cases/Security Incidents|Security Incidents]]
 - [[Use Cases/Agent Trace Observability|Agent Trace Observability]]
 - [[Use Cases/Invoice Processing|Invoice Processing]]
 - [[Use Cases/Customer Service|Customer Service]]
+
+### Our use cases
+
+- [[Use Cases/Intent Classification|Intent Classification]] — first independent use case, agreed on 2026-09-18. BANKING77 and the detailed experiment design remain provisional.
 
 ## TypeSafe evaluation methodology
 
