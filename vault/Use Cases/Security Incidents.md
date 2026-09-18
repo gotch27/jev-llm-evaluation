@@ -1,6 +1,6 @@
 # Security Incidents
 
-[[Use Cases|← Use cases]]
+[← Use cases](../Use%20Cases.md)
 
 Added on 2026-09-18 to document TypeSafe’s published evaluation as background for the thesis. Any independent experiments on a similar task will be documented in a separate note.
 
@@ -14,7 +14,7 @@ Added on 2026-09-18 to document TypeSafe’s published evaluation as background 
 
 **Method:** The model assesses authorization, explanations in the records, and evidence strength. Code uses those judgments to choose whether to close, queue, or act; further questions inform containment and escalation.
 
-Source: [TypeSafe — Security Incidents](https://evals.typesafe.ai/security_incidents), accessed 2026-09-18. This describes TypeSafe's work, not our findings. See [[Use Cases#TypeSafe evaluation methodology]] for the shared comparison method and limitations.
+Source: [TypeSafe — Security Incidents](https://evals.typesafe.ai/security_incidents), accessed 2026-09-18. This describes TypeSafe's work, not our findings. See [Use Cases — TypeSafe evaluation methodology](../Use%20Cases.md#typesafe-evaluation-methodology) for the shared comparison method and limitations.
 
 
 ## Reproducibility limitation

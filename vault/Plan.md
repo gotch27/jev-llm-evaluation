@@ -1,6 +1,6 @@
 # Plan
 
-[[Thesis Home|← Thesis home]]
+[← Thesis home](Thesis%20Home.md)
 
 Agreed direction recorded on 2026-09-18. Develop further decisions in chat and save them here only when Gorazd authorizes changes.
 
@@ -28,17 +28,17 @@ The central questions are where each approach works well, where it struggles, an
 
 ### Technical foundations
 
-Read and study the publicly available material needed to explain how the models are built and trained. Distinguish disclosed technical details from provider claims and information that is not publicly available. Keep sources and reading notes in [[Research and Tools]].
+Read and study the publicly available material needed to explain how the models are built and trained. Distinguish disclosed technical details from provider claims and information that is not publicly available. Keep sources and reading notes in [Research and Tools](Research%20and%20Tools.md).
 
 ### Comparative and combined-model experiments
 
 First choose tasks for standalone evaluation of Jev against LLMs, preferably tasks that can later support combined experiments using the same datasets. Establish individual model performance before testing whether combining them improves the quality, time, or cost of completing the task. Combined experiments evaluate the whole workflow and do not replace standalone model evaluation.
 
-Select specific tasks and combinations together rather than committing to one application domain. Record methods, configurations, results, limitations, and interpretation in the individual use-case notes linked from [[Use Cases]].
+Select specific tasks and combinations together rather than committing to one application domain. Record methods, configurations, results, limitations, and interpretation in the individual use-case notes linked from [Use Cases](Use%20Cases.md).
 
 ### Reusable software modules
 
-Develop shared modules for calling the Jev and LLM APIs, handling task inputs and datasets, running experiments, and logging and evaluating results. Reuse these modules across experiments and combined workflows. Keep implementation and raw outputs in the separate research repository and link them from the vault.
+Develop shared modules for calling the Jev and LLM APIs, handling task inputs and datasets, running experiments, and logging and evaluating results. Reuse these modules across experiments and combined workflows. Keep implementation in `research/` within this repository, with raw outputs in ignored output directories or external storage, and link them from the vault.
 
 ### Optional demonstration
 
@@ -54,7 +54,7 @@ A small application demonstrating a selected use case is an optional extension. 
 
 ## Milestones and next actions
 
-Discuss TypeSafe's four published workflow evaluations, indexed in [[Use Cases#Use cases]], as background before presenting our independent experiments. Our experiments will be documented in separate notes, even if they address similar tasks. The next discussion is to choose our standalone evaluation tasks, followed by datasets and experimental configurations. Establish standalone results before selecting and evaluating combined approaches. Reading the technical foundations and developing reusable modules will support the experiments. The resulting evidence will support the analysis and recommendations; the optional demo follows selection of a suitable use case.
+Discuss TypeSafe's four published workflow evaluations, indexed in [Use Cases — Use cases](Use%20Cases.md#use-cases), as background before presenting our independent experiments. Our experiments will be documented in separate notes, even if they address similar tasks. The next discussion is to choose our standalone evaluation tasks, followed by datasets and experimental configurations. Establish standalone results before selecting and evaluating combined approaches. Reading the technical foundations and developing reusable modules will support the experiments. The resulting evidence will support the analysis and recommendations; the optional demo follows selection of a suitable use case.
 
 ## Open questions
 

@@ -1,6 +1,6 @@
 # Research and Tools
 
-[[Thesis Home|← Thesis home]]
+[← Thesis home](Thesis%20Home.md)
 
 ## Sources and reading notes
 
@@ -26,6 +26,10 @@ Record what we use, its version, why we chose it, and any relevant limitations o
 
 ## Setup and reproducibility
 
-The vault uses a local Git repository to preserve note history. Create commits or push changes only with Gorazd's explicit authorization; permission to edit notes does not include either action. macOS metadata, Obsidian workspace layouts, and `.idea/` editor settings are ignored. Keep research code in a separate repository and link it here.
+The project uses one local Git repository to version the Markdown documentation and research code together. Create commits or push changes only with Gorazd's explicit authorization; permission to edit notes does not include either action. macOS metadata and `.idea/` editor settings are ignored. Read the Markdown notes in `vault/` using the IDE; keep Python research code in the sibling `research/` directory.
 
-Link the code repository and record environment details and commands needed to reproduce the work. Keep credentials out of these notes.
+See [research setup](../research/README.md) for environment details and commands. Record code revisions and output locations for each run. Keep credentials out of these notes.
+
+### Python project setup
+
+Repository reorganized on 2026-09-18 after choosing one repository for notes and code and Python for implementation. The initial scaffold uses Python 3.12, uv for dependency locking, and pytest/Ruff for development checks. Model adapters, dataset loading, the runner, and evaluation logic are not implemented yet.

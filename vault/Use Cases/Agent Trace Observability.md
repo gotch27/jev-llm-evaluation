@@ -1,6 +1,6 @@
 # Agent Trace Observability
 
-[[Use Cases|← Use cases]]
+[← Use cases](../Use%20Cases.md)
 
 Added on 2026-09-18 to document TypeSafe’s published evaluation as background for the thesis. Any independent experiments on a similar task will be documented in a separate note.
 
@@ -14,7 +14,7 @@ Added on 2026-09-18 to document TypeSafe’s published evaluation as background 
 
 **Method:** The workflow checks permissions for irreversible actions, then assesses task completion and customer satisfaction separately. Further judgments determine the appropriate follow-up.
 
-Source: [TypeSafe — Agent Trace Observability](https://evals.typesafe.ai/agent_trace_observability), accessed 2026-09-18. This describes TypeSafe's work, not our findings. See [[Use Cases#TypeSafe evaluation methodology]] for the shared comparison method and limitations.
+Source: [TypeSafe — Agent Trace Observability](https://evals.typesafe.ai/agent_trace_observability), accessed 2026-09-18. This describes TypeSafe's work, not our findings. See [Use Cases — TypeSafe evaluation methodology](../Use%20Cases.md#typesafe-evaluation-methodology) for the shared comparison method and limitations.
 
 
 ## Reproducibility limitation

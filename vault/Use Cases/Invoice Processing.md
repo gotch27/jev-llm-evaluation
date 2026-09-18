@@ -1,6 +1,6 @@
 # Invoice Processing
 
-[[Use Cases|← Use cases]]
+[← Use cases](../Use%20Cases.md)
 
 Added on 2026-09-18 to document TypeSafe’s published evaluation as background for the thesis. Any independent experiments on a similar task will be documented in a separate note.
 
@@ -14,7 +14,7 @@ Added on 2026-09-18 to document TypeSafe’s published evaluation as background 
 
 **Method:** Model questions assess the documents while code handles calculations and rules. The workflow checks reasons to stop, collects holds and disputes, and determines the conditions for releasing payment.
 
-Source: [TypeSafe — Invoice Processing](https://evals.typesafe.ai/invoice_processing), accessed 2026-09-18. This describes TypeSafe's work, not our findings. See [[Use Cases#TypeSafe evaluation methodology]] for the shared comparison method and limitations.
+Source: [TypeSafe — Invoice Processing](https://evals.typesafe.ai/invoice_processing), accessed 2026-09-18. This describes TypeSafe's work, not our findings. See [Use Cases — TypeSafe evaluation methodology](../Use%20Cases.md#typesafe-evaluation-methodology) for the shared comparison method and limitations.
 
 
 ## Reproducibility limitation

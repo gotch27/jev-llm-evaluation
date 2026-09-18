@@ -1,6 +1,6 @@
 # Customer Service
 
-[[Use Cases|← Use cases]]
+[← Use cases](../Use%20Cases.md)
 
 Added on 2026-09-18 to document TypeSafe’s published evaluation as background for the thesis. Any independent experiments on a similar task will be documented in a separate note.
 
@@ -14,7 +14,7 @@ Added on 2026-09-18 to document TypeSafe’s published evaluation as background 
 
 **Method:** The model assesses intent, frustration, urgency, and risk. Conditional follow-ups examine consent and account issues. The workflow also checks the assistant’s claims against records before code selects actions.
 
-Source: [TypeSafe — Customer Service](https://evals.typesafe.ai/customer_service), accessed 2026-09-18. This describes TypeSafe's work, not our findings. See [[Use Cases#TypeSafe evaluation methodology]] for the shared comparison method and limitations.
+Source: [TypeSafe — Customer Service](https://evals.typesafe.ai/customer_service), accessed 2026-09-18. This describes TypeSafe's work, not our findings. See [Use Cases — TypeSafe evaluation methodology](../Use%20Cases.md#typesafe-evaluation-methodology) for the shared comparison method and limitations.
 
 
 ## Reproducibility limitation

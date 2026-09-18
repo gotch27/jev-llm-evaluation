@@ -1,9 +1,27 @@
-# macOS metadata
+# macOS and editor state
 .DS_Store
-
-# Obsidian's per-device workspace layouts
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-
-# JetBrains editor settings
 .idea/
+
+# Credentials and local environments
+.env
+.env.*
+!.env.example
+.venv/
+
+# Python build and tool artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+.coverage
+htmlcov/
+
+# Downloaded data and generated runs
+research/data/*
+!research/data/.gitkeep
+research/outputs/*
+!research/outputs/.gitkeep
