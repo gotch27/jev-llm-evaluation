@@ -6,10 +6,10 @@ This vault holds the reviewed and authorized context of a graduate thesis explor
 
 - [[Plan]] — research questions, scope, thesis outline, evaluation approach, milestones, and approved open questions.
 - [[Research and Tools]] — sources, reading notes, frameworks, and setup details.
-- [[Experiments]] — experiment designs, run records, results, and interpretation.
+- [[Use Cases]] — overview of individual use-case notes in `Use Cases/`, with shared experiment-recording guidelines. Published-evaluation notes document TypeSafe’s work; separate notes hold our experiments, results, and interpretation.
 - [[Journal]] — dated decisions, their rationale, mentor feedback, and meaningful changes.
 
-Start with [[Plan]]. Discuss ideas in chat and update the vault only when Gorazd authorizes saving the agreed material. Keep the structure flat and link code, datasets, and raw outputs from their actual locations.
+Start with [[Plan]]. Discuss ideas in chat and update the vault only when Gorazd authorizes saving the agreed material. Keep the main project notes at the root and each use case with its experiments in `Use Cases/`. Link code, datasets, and raw outputs from their actual locations.
 
 ## Context
 

@@ -15,7 +15,8 @@ This Obsidian vault holds the context of a graduate thesis exploring Jev and its
 - `Thesis Home.md`: current direction and navigation; start here.
 - `Plan.md`: research questions, scope, chapter outline, evaluation approach, milestones, next actions, and current open questions approved for recording.
 - `Research and Tools.md`: sources, reading notes, models, frameworks, datasets, and reproducible setup.
-- `Experiments.md`: experiment questions, methods, configurations, runs, results, limitations, and interpretation.
+- `Use Cases.md`: overview linking to individual use cases, shared evaluation context, and experiment-recording guidelines.
+- `Use Cases/`: notes documenting published evaluations and separate notes for our own use cases. Published-evaluation notes contain descriptions, methods, sources, and limitations; our use-case notes contain descriptions, experiments, results, and interpretation. Keep these separate even when the tasks are similar.
 - `Journal.md`: dated decisions and their reasons, mentor feedback, and meaningful changes.
 
 ## How we collaborate
@@ -38,5 +39,5 @@ This Obsidian vault holds the context of a graduate thesis exploring Jev and its
 - Distinguish source claims, hypotheses, and measured findings. Keep source links and access dates; never invent citations, results, or completed work.
 - For experiments, record enough to reproduce the run: data and split, model/version, prompts/configuration, code commit, commands, and output locations. Preserve failed and inconclusive results too.
 - Keep code, datasets, and raw outputs in the research repository or their actual storage locations; link them here. Never store credentials in the vault.
-- Keep the structure flat. Propose new notes or folders only when existing notes become unwieldy; create them and update home-note links only within an authorized change. Leave `.obsidian` settings alone unless requested.
+- Keep the main project notes at the root and use-case notes under `Use Cases/`, with each of our cases’ experiments, results, and interpretation together, separate from notes documenting published evaluations. Propose further splits only when existing notes become unwieldy; create them and update navigation links only within an authorized change. Leave `.obsidian` settings alone unless requested.
 - End substantive tasks with a brief account of what changed and what remains open. Use specialized skills only when the task calls for them; ordinary Markdown planning and journaling need no extra workflow.
