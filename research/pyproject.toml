@@ -4,7 +4,15 @@ version = "0.1.0"
 description = "Experiments comparing Jev and large language models"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "openai>=3.16,<4",
+    "python-dotenv>=1.1,<2",
+    "system-one-adapter[openai]>=0.2,<0.3",
+    "typesafe-sdk>=0.7,<0.8",
+]
+
+[project.scripts]
+thesis-research = "thesis_research.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

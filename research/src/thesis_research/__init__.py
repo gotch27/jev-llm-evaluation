@@ -1,1 +1,1 @@
-"""Reusable components for thesis experiments; implementation forthcoming."""
+"""Reusable components for reproducible Jev and LLM thesis experiments."""

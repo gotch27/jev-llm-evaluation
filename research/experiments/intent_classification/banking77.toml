@@ -1,0 +1,393 @@
+name = "banking77_all_intents"
+dataset_revision = "57ec275d8078af65b7731c2a98be812d844a6d6b"
+split = "test"
+
+[question]
+state_field = "customer_message"
+id = "intent"
+instructions = "Classify the supplied customer message into the single listed banking intent that best matches the customer’s primary request or problem. Use the banking feature or transaction type and its stated status, such as pending, declined, reverted, missing, unrecognized, or charged a fee, to distinguish similar intents. Use only information in the customer message and do not infer unstated events. Every message belongs to one listed intent; when wording is brief or ambiguous, select the closest supported intent."
+
+[[question.options]]
+label = "card_arrival"
+use_when = "A physical card has already been ordered or dispatched and the customer is tracking it or reporting that it has not arrived."
+distinguish_from = "Use card_delivery_estimate for a general delivery-time question before a card is overdue, and order_physical_card for obtaining a card."
+
+[[question.options]]
+label = "card_linking"
+use_when = "The customer wants to link an existing physical card to the app, including relinking a card that was previously removed."
+distinguish_from = "Use activate_my_card when the card must be activated for use, and order_physical_card when the customer does not yet have a card."
+
+[[question.options]]
+label = "exchange_rate"
+use_when = "The customer asks for a current or general currency conversion rate without disputing a completed transaction."
+distinguish_from = "Use card_payment_wrong_exchange_rate or wrong_exchange_rate_for_cash_withdrawal for an incorrect applied rate, and exchange_charge for exchange fees."
+
+[[question.options]]
+label = "card_payment_wrong_exchange_rate"
+use_when = "A completed card purchase used an exchange rate the customer believes was incorrect."
+distinguish_from = "Use wrong_exchange_rate_for_cash_withdrawal for an ATM withdrawal and exchange_rate for a general rate question."
+
+[[question.options]]
+label = "extra_charge_on_statement"
+use_when = "The statement contains a small separate extra card charge, commonly a one-unit verification charge, that the customer wants explained."
+distinguish_from = "Use card_payment_fee_charged for a fee attached to a card purchase and card_payment_not_recognised for an unfamiliar merchant payment."
+
+[[question.options]]
+label = "pending_cash_withdrawal"
+use_when = "An ATM cash withdrawal is shown as pending or has not finished processing."
+distinguish_from = "Use declined_cash_withdrawal when the ATM refused the withdrawal and cash_withdrawal_charge when it completed with a fee."
+
+[[question.options]]
+label = "fiat_currency_support"
+use_when = "The customer asks which fiat currencies the account can hold, exchange, or maintain as balances."
+distinguish_from = "Use supported_cards_and_currencies for currencies accepted specifically for card top-ups and country_support for geographic service availability."
+
+[[question.options]]
+label = "card_delivery_estimate"
+use_when = "The customer asks how long physical card delivery normally takes, whether it can be expedited, or when a newly ordered card should arrive."
+distinguish_from = "Use card_arrival when an already dispatched card is overdue or the customer wants to track its actual delivery."
+
+[[question.options]]
+label = "automatic_top_up"
+use_when = "The customer asks how automatic top-up works, how to enable it, or about its settings and limits."
+distinguish_from = "Use topping_up_by_card for a manual card top-up and top_up_limits for limits on manual top-ups."
+
+[[question.options]]
+label = "card_not_working"
+use_when = "A physical card is generally unusable, damaged, or failing across uses without a more specific payment method or status."
+distinguish_from = "Use declined_card_payment for a merchant payment explicitly declined, contactless_not_working for contactless only, and virtual_card_not_working for a virtual card."
+
+[[question.options]]
+label = "exchange_via_app"
+use_when = "The customer asks how to convert or exchange currencies inside the app."
+distinguish_from = "Use exchange_rate for the rate itself and exchange_charge for the fee charged for exchanging."
+
+[[question.options]]
+label = "lost_or_stolen_card"
+use_when = "A physical card is lost or stolen and the customer needs to freeze, report, or replace it."
+distinguish_from = "Use lost_or_stolen_phone for a missing phone and compromised_card when the concern is fraudulent card use without the card being missing."
+
+[[question.options]]
+label = "age_limit"
+use_when = "The customer asks about the minimum age or eligibility of a child or young person to open or use an account."
+distinguish_from = "Use country_support for eligibility based on residence or country rather than age."
+
+[[question.options]]
+label = "pin_blocked"
+use_when = "The card PIN is blocked after too many incorrect attempts and must be unblocked or reset."
+distinguish_from = "Use change_pin for voluntarily choosing a new PIN, get_physical_card for finding the current card PIN, and passcode_forgotten for the app passcode."
+
+[[question.options]]
+label = "contactless_not_working"
+use_when = "Contactless or tap-to-pay on the physical card is specifically not working."
+distinguish_from = "Use card_not_working when the whole physical card is unusable and declined_card_payment for a merchant payment explicitly declined."
+
+[[question.options]]
+label = "top_up_by_bank_transfer_charge"
+use_when = "The customer asks about or disputes a fee for adding money by bank transfer, including a SEPA transfer into the account."
+distinguish_from = "Use transfer_fee_charged for a fee on sending a transfer and top_up_by_card_charge for a fee on topping up with a bank card."
+
+[[question.options]]
+label = "pending_top_up"
+use_when = "A card top-up is explicitly pending or taking unusually long to finish."
+distinguish_from = "Use top_up_failed when it never succeeded, top_up_reverted when it appeared and was reversed, and balance_not_updated_after_bank_transfer for a bank transfer."
+
+[[question.options]]
+label = "cancel_transfer"
+use_when = "The customer wants to cancel or reverse a money transfer, often because it was sent to the wrong account."
+distinguish_from = "Use request_refund for cancelling or refunding a card purchase and reverted_card_payment? when a card payment was automatically reversed."
+
+[[question.options]]
+label = "top_up_limits"
+use_when = "The customer asks about minimum, maximum, frequency, or other limits for manual top-ups."
+distinguish_from = "Use automatic_top_up for limits or settings specifically concerning automatic top-ups and disposable_card_limits for disposable virtual cards."
+
+[[question.options]]
+label = "wrong_amount_of_cash_received"
+use_when = "An ATM dispensed a different or smaller cash amount than the customer requested."
+distinguish_from = "Use cash_withdrawal_charge for an ATM fee and wrong_exchange_rate_for_cash_withdrawal when the discrepancy is caused by an exchange rate."
+
+[[question.options]]
+label = "card_payment_fee_charged"
+use_when = "A fee was charged specifically for making a purchase or payment with the card."
+distinguish_from = "Use extra_charge_on_statement for a separate small statement charge and card_payment_wrong_exchange_rate for a currency-conversion problem."
+
+[[question.options]]
+label = "transfer_not_received_by_recipient"
+use_when = "The customer sent an outgoing transfer but the intended recipient or beneficiary has not received the money."
+distinguish_from = "Use pending_transfer when the transfer itself is explicitly marked pending and balance_not_updated_after_bank_transfer when money sent into the customer’s own account is missing."
+
+[[question.options]]
+label = "supported_cards_and_currencies"
+use_when = "The customer asks which bank card types, card issuers, or currencies can be used to make a card top-up."
+distinguish_from = "Use fiat_currency_support for currencies the account can hold and apple_pay_or_google_pay for top-ups through a digital wallet."
+
+[[question.options]]
+label = "getting_virtual_card"
+use_when = "The customer wants to obtain or locate a standard virtual card."
+distinguish_from = "Use get_disposable_virtual_card for a disposable virtual card and virtual_card_not_working when an existing virtual card fails."
+
+[[question.options]]
+label = "card_acceptance"
+use_when = "The customer asks which merchants, businesses, or locations accept an existing card for payment."
+distinguish_from = "Use country_support for countries where the service or card can be obtained and atm_support for compatible cash machines."
+
+[[question.options]]
+label = "top_up_reverted"
+use_when = "A top-up initially appeared to succeed or credit the account but was later reversed, cancelled, or disappeared."
+distinguish_from = "Use pending_top_up when processing is unfinished and top_up_failed when the top-up never succeeded."
+
+[[question.options]]
+label = "balance_not_updated_after_cheque_or_cash_deposit"
+use_when = "The customer already deposited cash or a cheque but the account balance has not been updated."
+distinguish_from = "Use top_up_by_cash_or_cheque when asking whether or how to add money using cash or a cheque."
+
+[[question.options]]
+label = "card_payment_not_recognised"
+use_when = "The customer sees a specific card purchase or merchant payment they do not recognize."
+distinguish_from = "Use cash_withdrawal_not_recognised for an ATM withdrawal, direct_debit_payment_not_recognised for a direct debit, and compromised_card for a broader belief that the card is compromised."
+
+[[question.options]]
+label = "edit_personal_details"
+use_when = "The customer wants to change personal account information such as a name, address, phone number, or other profile detail."
+distinguish_from = "Use verify_my_identity when the customer needs to complete identity verification rather than edit their stored details."
+
+[[question.options]]
+label = "why_verify_identity"
+use_when = "The customer questions why identity verification or personal identity information is required."
+distinguish_from = "Use verify_my_identity for instructions or requirements and unable_to_verify_identity when an attempted verification fails."
+
+[[question.options]]
+label = "unable_to_verify_identity"
+use_when = "The customer is trying to verify their identity but the process fails, rejects their documents, or cannot be completed."
+distinguish_from = "Use verify_my_identity for how to verify and why_verify_identity for the reason verification is required."
+
+[[question.options]]
+label = "get_physical_card"
+use_when = "The customer needs to find, view, receive, or set the PIN associated with a physical card."
+distinguish_from = "Despite this label’s name, use order_physical_card for obtaining the physical card itself, change_pin for changing a known PIN, and passcode_forgotten for the app passcode."
+
+[[question.options]]
+label = "visa_or_mastercard"
+use_when = "The customer asks whether the issued card is Visa or Mastercard or requests one of those card schemes."
+distinguish_from = "Use supported_cards_and_currencies for bank cards accepted as top-up sources rather than the scheme of the issued card."
+
+[[question.options]]
+label = "topping_up_by_card"
+use_when = "The customer asks how to add money manually using a bank card, including whether another person can top up the account."
+distinguish_from = "Use supported_cards_and_currencies for eligible top-up cards, top_up_by_card_charge for fees, and top_up_failed or pending_top_up for a known status problem."
+
+[[question.options]]
+label = "disposable_card_limits"
+use_when = "The customer asks about usage counts, merchant restrictions, availability limits, or other rules for disposable virtual cards."
+distinguish_from = "Use get_disposable_virtual_card for obtaining one and virtual_card_not_working for a virtual card payment failure without a general limitation question."
+
+[[question.options]]
+label = "compromised_card"
+use_when = "The customer believes the card details or account have been compromised, hacked, or used fraudulently and wants to secure the card."
+distinguish_from = "Use card_payment_not_recognised for one specific unfamiliar card purchase and lost_or_stolen_card when the physical card itself is missing."
+
+[[question.options]]
+label = "atm_support"
+use_when = "The customer asks which ATMs or cash machines accept the card or where cash can be withdrawn."
+distinguish_from = "Use card_acceptance for merchant payments and declined_cash_withdrawal when a particular ATM withdrawal was refused."
+
+[[question.options]]
+label = "direct_debit_payment_not_recognised"
+use_when = "The customer sees a direct debit in the account or statement that they do not recognize or authorize."
+distinguish_from = "Use card_payment_not_recognised for a card purchase and cash_withdrawal_not_recognised for an ATM withdrawal."
+
+[[question.options]]
+label = "passcode_forgotten"
+use_when = "The customer forgot the app passcode or password and cannot access the app or account."
+distinguish_from = "Use get_physical_card for locating the card PIN, change_pin for changing it, and pin_blocked when too many incorrect PIN attempts blocked the card."
+
+[[question.options]]
+label = "declined_cash_withdrawal"
+use_when = "An ATM explicitly declined, rejected, or refused a requested cash withdrawal."
+distinguish_from = "Use pending_cash_withdrawal when it remains pending and card_not_working when the physical card generally fails outside an ATM-specific request."
+
+[[question.options]]
+label = "pending_card_payment"
+use_when = "A card purchase or merchant payment is explicitly shown as pending or has not finished processing."
+distinguish_from = "Use declined_card_payment when it was refused and reverted_card_payment? when it first completed and was later reversed."
+
+[[question.options]]
+label = "lost_or_stolen_phone"
+use_when = "The customer’s phone is lost or stolen and they need to protect access to the account or app."
+distinguish_from = "Use lost_or_stolen_card when the missing item is the physical card and compromised_card for suspected fraudulent card use."
+
+[[question.options]]
+label = "request_refund"
+use_when = "The customer wants to request a refund, cancel a card purchase, or recover money for goods or services."
+distinguish_from = "Use Refund_not_showing_up when a merchant refund is already expected but missing and reverted_card_payment? when a card payment was automatically reversed."
+
+[[question.options]]
+label = "declined_transfer"
+use_when = "A money transfer is explicitly reported as declined or rejected."
+distinguish_from = "Use failed_transfer for a transfer that does not complete without an explicit declined status and beneficiary_not_allowed when the payee is specifically blocked."
+
+[[question.options]]
+label = "Refund_not_showing_up"
+use_when = "A refund has already been requested or issued by a merchant but has not appeared in the account or statement."
+distinguish_from = "Use request_refund when the customer has not yet obtained the refund and reverted_card_payment? when the original card payment was automatically reversed."
+
+[[question.options]]
+label = "declined_card_payment"
+use_when = "A purchase or merchant card payment is explicitly declined, rejected, or refused."
+distinguish_from = "Use card_not_working when the physical card is generally unusable, contactless_not_working for contactless only, and virtual_card_not_working for a virtual card."
+
+[[question.options]]
+label = "pending_transfer"
+use_when = "A money transfer is explicitly marked pending or still processing."
+distinguish_from = "Use transfer_not_received_by_recipient when a sent transfer is no longer described as pending but the recipient lacks it, and failed_transfer when processing failed."
+
+[[question.options]]
+label = "terminate_account"
+use_when = "The customer wants to close, delete, deactivate, or terminate the account."
+distinguish_from = "Use edit_personal_details when the customer wants to change account information while keeping the account."
+
+[[question.options]]
+label = "card_swallowed"
+use_when = "An ATM retained, swallowed, or trapped the customer’s physical card."
+distinguish_from = "Use lost_or_stolen_card when the card is missing outside an ATM and declined_cash_withdrawal when the ATM returned the card but refused cash."
+
+[[question.options]]
+label = "transaction_charged_twice"
+use_when = "The same card purchase or transaction appears twice or the customer was charged twice for one purchase."
+distinguish_from = "Use card_payment_not_recognised for an unfamiliar single payment and extra_charge_on_statement for a separate small verification charge."
+
+[[question.options]]
+label = "verify_source_of_funds"
+use_when = "The customer needs to identify, trace, explain, or verify where money in the account came from."
+distinguish_from = "Use receiving_money for how another person or employer can send money and verify_my_identity for identity verification."
+
+[[question.options]]
+label = "transfer_timing"
+use_when = "The customer asks how long an incoming bank transfer, often an international transfer, should take to reach their own account."
+distinguish_from = "Use balance_not_updated_after_bank_transfer when an expected completed transfer is missing from the balance and transfer_not_received_by_recipient for an outgoing transfer."
+
+[[question.options]]
+label = "reverted_card_payment?"
+use_when = "A card payment initially appeared to complete or debit the account but was later reversed and the funds returned."
+distinguish_from = "Use declined_card_payment when the payment never succeeded, request_refund when the customer wants a refund, and Refund_not_showing_up when a merchant refund is missing."
+
+[[question.options]]
+label = "change_pin"
+use_when = "The customer knows or can use the current card PIN and wants to replace it with a different PIN."
+distinguish_from = "Use get_physical_card for locating or receiving the PIN and pin_blocked when incorrect attempts have blocked it."
+
+[[question.options]]
+label = "beneficiary_not_allowed"
+use_when = "A particular beneficiary or payee cannot be added, selected, or used for a transfer because the beneficiary is not allowed."
+distinguish_from = "Use declined_transfer when a submitted transfer is explicitly declined and failed_transfer for a general transfer failure not tied to beneficiary eligibility."
+
+[[question.options]]
+label = "transfer_fee_charged"
+use_when = "The customer asks about or disputes a fee charged for sending a money transfer."
+distinguish_from = "Use top_up_by_bank_transfer_charge for a fee on adding money by bank transfer and card_payment_fee_charged for a card purchase fee."
+
+[[question.options]]
+label = "receiving_money"
+use_when = "The customer asks how another person or employer can send money or salary to the account."
+distinguish_from = "Use transfer_into_account for moving money from the customer’s own external bank account and transfer_timing for how long an incoming transfer takes."
+
+[[question.options]]
+label = "failed_transfer"
+use_when = "A money transfer could not be completed or repeatedly failed without an explicit declined status or beneficiary restriction."
+distinguish_from = "Use declined_transfer when the status says declined, beneficiary_not_allowed when the payee is blocked, and pending_transfer when processing has not finished."
+
+[[question.options]]
+label = "transfer_into_account"
+use_when = "The customer asks how to add money to their own account through a bank transfer from an external bank account."
+distinguish_from = "Use topping_up_by_card for adding money with a bank card and receiving_money for payments or salary sent by another person or employer."
+
+[[question.options]]
+label = "verify_top_up"
+use_when = "The customer asks how to verify a top-up card or where to find the verification code used for a card top-up."
+distinguish_from = "Use verify_my_identity for identity verification and top_up_failed when the top-up itself was rejected or unsuccessful."
+
+[[question.options]]
+label = "getting_spare_card"
+use_when = "The customer wants an additional, extra, or spare physical card or asks about the cost of one."
+distinguish_from = "Use order_physical_card for the first or standard physical card and lost_or_stolen_card for replacing a missing card."
+
+[[question.options]]
+label = "top_up_by_cash_or_cheque"
+use_when = "The customer asks whether or how to add money to the account using cash or a cheque."
+distinguish_from = "Use balance_not_updated_after_cheque_or_cash_deposit when cash or a cheque was already deposited but the balance is missing it."
+
+[[question.options]]
+label = "order_physical_card"
+use_when = "The customer wants to obtain or order a standard physical card or asks about its price or delivery eligibility."
+distinguish_from = "Use get_physical_card for finding the physical card’s PIN, getting_spare_card for an additional card, and card_delivery_estimate for delivery time."
+
+[[question.options]]
+label = "virtual_card_not_working"
+use_when = "An existing standard or disposable virtual card is failing or being rejected for a payment."
+distinguish_from = "Use getting_virtual_card or get_disposable_virtual_card to obtain a card and disposable_card_limits for a general usage restriction."
+
+[[question.options]]
+label = "wrong_exchange_rate_for_cash_withdrawal"
+use_when = "An ATM cash withdrawal used an exchange rate the customer believes was incorrect."
+distinguish_from = "Use cash_withdrawal_charge for an ATM fee, wrong_amount_of_cash_received for incorrect cash dispensed, and card_payment_wrong_exchange_rate for a purchase."
+
+[[question.options]]
+label = "get_disposable_virtual_card"
+use_when = "The customer wants to obtain a disposable virtual card or asks what that type of card is for."
+distinguish_from = "Use getting_virtual_card for a standard virtual card and disposable_card_limits for limits on an existing disposable card."
+
+[[question.options]]
+label = "top_up_failed"
+use_when = "A card top-up was rejected, failed, or never completed successfully."
+distinguish_from = "Use pending_top_up when it is still processing and top_up_reverted when it first succeeded and was later reversed."
+
+[[question.options]]
+label = "balance_not_updated_after_bank_transfer"
+use_when = "A bank transfer into the customer’s own account was made or should have arrived, but the account balance does not show it."
+distinguish_from = "Use transfer_timing for a general question about incoming transfer duration and transfer_not_received_by_recipient for an outgoing transfer missing at the recipient."
+
+[[question.options]]
+label = "cash_withdrawal_not_recognised"
+use_when = "The account or app shows an ATM cash withdrawal the customer did not make or recognize."
+distinguish_from = "Use card_payment_not_recognised for a merchant purchase and direct_debit_payment_not_recognised for a direct debit."
+
+[[question.options]]
+label = "exchange_charge"
+use_when = "The customer asks about or disputes a fee for converting or exchanging currencies."
+distinguish_from = "Use exchange_rate for the conversion rate and card_payment_wrong_exchange_rate or wrong_exchange_rate_for_cash_withdrawal for an incorrect applied rate."
+
+[[question.options]]
+label = "top_up_by_card_charge"
+use_when = "The customer asks about or disputes a fee for adding money using a bank card."
+distinguish_from = "Use top_up_by_bank_transfer_charge for a bank-transfer top-up fee and transfer_fee_charged for a fee on sending money."
+
+[[question.options]]
+label = "activate_my_card"
+use_when = "A new or replacement physical card needs to be activated, or an activation attempt is not working."
+distinguish_from = "Use card_linking for adding an existing card to the app and card_not_working for a card that was already active but is generally unusable."
+
+[[question.options]]
+label = "cash_withdrawal_charge"
+use_when = "A fee was charged specifically for withdrawing cash from an ATM."
+distinguish_from = "Use wrong_exchange_rate_for_cash_withdrawal for an exchange-rate problem and transfer_fee_charged for a money-transfer fee."
+
+[[question.options]]
+label = "card_about_to_expire"
+use_when = "A physical card is near expiry or expired and the customer asks about renewal, replacement, or delivery of the new card."
+distinguish_from = "Use lost_or_stolen_card for a missing card and order_physical_card for obtaining a first or standard card."
+
+[[question.options]]
+label = "apple_pay_or_google_pay"
+use_when = "The customer asks whether or how to add money using Apple Pay, Google Pay, an Apple Watch, or another supported digital wallet."
+distinguish_from = "Use topping_up_by_card for a direct bank-card top-up and supported_cards_and_currencies for eligible top-up cards."
+
+[[question.options]]
+label = "verify_my_identity"
+use_when = "The customer asks how to complete identity verification or which documents and steps are required."
+distinguish_from = "Use why_verify_identity for the reason verification is required and unable_to_verify_identity when an attempted verification fails."
+
+[[question.options]]
+label = "country_support"
+use_when = "The customer asks in which countries the service, account, or card is available or whether residence in a country is supported."
+distinguish_from = "Use card_acceptance for merchants or locations where an existing card can be used and fiat_currency_support for supported account currencies."
