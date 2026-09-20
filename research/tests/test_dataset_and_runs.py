@@ -10,7 +10,6 @@ from thesis_research.datasets import (
     sha256_bytes,
 )
 from thesis_research.datasets.banking77 import FILES, REVISION
-from thesis_research.evaluation import run_classification_evaluation
 
 
 @pytest.fixture
@@ -87,43 +86,12 @@ def test_fresh_download_banking77(dataset, tmp_path, monkeypatch):
     assert REVISION in manifest["files"]["test.csv"]["url"]
 
 
-def test_runs_preserve_inputs_and_never_overwrite(dataset, tmp_path):
-    config = tmp_path / "experiment.toml"
-    config.write_text(
-        f'name = "synthetic verification"\ndataset_revision = "{REVISION}"\nsplit = "test"\n'
-    )
-    predictions = tmp_path / "predictions.jsonl"
-    original = b'{"id":"test:1","label":"label_0"}\n'
-    predictions.write_bytes(original)
-    outputs = tmp_path / "outputs"
-    first = run_classification_evaluation(config, predictions, tmp_path / "data", outputs)
-    second = run_classification_evaluation(config, predictions, tmp_path / "data", outputs)
-    assert first != second
-    assert (first / "summary.json").read_bytes() == (second / "summary.json").read_bytes()
-    assert (first / "predictions.jsonl").read_bytes() == original
-    assert (first / "config.toml").read_bytes() == config.read_bytes()
-    metadata = json.loads((first / "metadata.json").read_text())
-    assert metadata["status"] == "completed"
-    assert metadata["prediction_sha256"] == sha256_bytes(original)
-    assert metadata["dataset"]["revision"] == REVISION
-    assert "dirty" in metadata["code"]
-    predictions.write_text('{"id":"unknown","label":"label_0"}\n')
-    with pytest.raises(ValueError, match="preserved record"):
-        run_classification_evaluation(config, predictions, tmp_path / "data", outputs)
-    failed = (set(outputs.iterdir()) - {first, second}).pop()
-    assert json.loads((failed / "metadata.json").read_text())["status"] == "failed"
-    assert (failed / "predictions.jsonl").read_bytes() == predictions.read_bytes()
-    assert (first / "predictions.jsonl").read_bytes() == original
-
-
-def test_cli_evaluate_and_inspect(dataset, tmp_path):
+def test_cli_inspect(dataset, tmp_path):
     import subprocess
     import sys
 
     config = tmp_path / "experiment.toml"
-    config.write_text(
-        f'name = "synthetic CLI verification"\ndataset_revision = "{REVISION}"\nsplit = "test"\n'
-    )
+    config.write_text(f'name = "synthetic CLI verification"\ndataset_revision = "{REVISION}"\n')
     common = ["--config", str(config), "--data-dir", str(tmp_path / "data")]
     command = [sys.executable, "-m", "thesis_research.cli"]
     inspected = subprocess.run(
@@ -131,27 +99,6 @@ def test_cli_evaluate_and_inspect(dataset, tmp_path):
     )
     assert '"id": "train:1"' in inspected.stdout
     assert '"id": "test:1"' not in inspected.stdout
-    predictions = tmp_path / "synthetic.jsonl"
-    predictions.write_text("")
-    result = subprocess.run(
-        [
-            *command,
-            "evaluate",
-            *common,
-            "--predictions",
-            str(predictions),
-            "--output-dir",
-            str(tmp_path / "outputs"),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    from pathlib import Path
-
-    summary = json.loads((Path(result.stdout.strip()) / "summary.json").read_text())
-    assert summary["total"] == summary["prediction_counts"]["missing"] == 77
-    assert summary["accuracy"] == 0
 
 
 def test_reject_wrong_label_inventory(dataset):

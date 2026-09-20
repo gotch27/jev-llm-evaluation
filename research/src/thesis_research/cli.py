@@ -1,4 +1,4 @@
-"""Prepare data, run structured predictions, and evaluate saved predictions."""
+"""Prepare data, inspect examples, and run coordinated model benchmarks."""
 
 import argparse
 import asyncio
@@ -7,12 +7,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from thesis_research.config import load_experiment_config
+from thesis_research.benchmark import resume_benchmark, run_benchmark
+from thesis_research.config import load_task_config
 from thesis_research.datasets import load_prepared_banking77, prepare_banking77
-from thesis_research.evaluation import run_classification_evaluation
-from thesis_research.prediction_run import run_prediction_experiment
 
-DEFAULT_CONFIG = Path("experiments/intent_classification/banking77.toml")
+DEFAULT_CONFIG = Path("experiments/intent_classification/tasks/banking77.toml")
+DEFAULT_BENCHMARK_OUTPUT = Path("outputs/benchmarks")
 
 
 def main() -> None:
@@ -21,32 +21,16 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
     try:
-        if args.command == "predict":
-            run = asyncio.run(
-                run_prediction_experiment(
-                    args.config,
-                    args.data_dir,
-                    args.output_dir,
-                    backend=args.backend,
-                    model=args.model,
-                    provider=args.provider,
-                    max_concurrency=args.max_concurrency,
-                    limit=args.limit,
-                )
-            )
-            print(run)
-            return
-        if args.command == "evaluate":
-            run = run_classification_evaluation(
-                args.config,
-                args.predictions,
-                args.data_dir,
-                args.output_dir,
+        if args.command == "benchmark":
+            run = (
+                asyncio.run(resume_benchmark(args.resume, args.data_dir))
+                if args.resume is not None
+                else asyncio.run(run_benchmark(args.plan, args.data_dir, args.output_dir))
             )
             print(run)
             return
 
-        config = load_experiment_config(args.config)
+        config = load_task_config(args.config)
         if args.command == "prepare":
             print(prepare_banking77(args.data_dir, config.dataset_revision))
             return
@@ -66,19 +50,12 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_shared_arguments(inspect)
     inspect.add_argument("--limit", type=int, default=5)
 
-    predict = commands.add_parser("predict", help="Generate saved model predictions")
-    _add_shared_arguments(predict)
-    predict.add_argument("--backend", choices=("jev", "llm"), required=True)
-    predict.add_argument("--model", required=True)
-    predict.add_argument("--provider")
-    predict.add_argument("--max-concurrency", type=int, default=5)
-    predict.add_argument("--limit", type=int)
-    predict.add_argument("--output-dir", type=Path, default=Path("outputs/predictions"))
-
-    evaluate = commands.add_parser("evaluate", help="Score a saved prediction file")
-    _add_shared_arguments(evaluate)
-    evaluate.add_argument("--predictions", type=Path, required=True)
-    evaluate.add_argument("--output-dir", type=Path, default=Path("outputs"))
+    benchmark = commands.add_parser("benchmark", help="Run or resume a coordinated benchmark")
+    source = benchmark.add_mutually_exclusive_group(required=True)
+    source.add_argument("--plan", type=Path)
+    source.add_argument("--resume", type=Path, metavar="RUN_DIRECTORY")
+    benchmark.add_argument("--data-dir", type=Path, default=Path("data"))
+    benchmark.add_argument("--output-dir", type=Path, default=DEFAULT_BENCHMARK_OUTPUT)
     return parser
 
 

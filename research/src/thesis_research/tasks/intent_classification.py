@@ -1,4 +1,4 @@
-"""Build the shared BANKING77 state and Choice question from experiment config."""
+"""Build the shared BANKING77 state and Choice question from task config."""
 
 from collections import Counter
 from collections.abc import Sequence
@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from typesafe_sdk import Choice, Questions
 
-from thesis_research.config import ExperimentConfig
+from thesis_research.config import TaskConfig
 
 STATE_FIELD = "customer_message"
 QUESTION_ID = "intent"
@@ -48,7 +48,7 @@ class IntentClassificationTask:
 
 
 def build_banking77_task(
-    config: ExperimentConfig, expected_labels: Sequence[str]
+    config: TaskConfig, expected_labels: Sequence[str]
 ) -> IntentClassificationTask:
     """Validate the BANKING77 question and construct its TypeSafe Choice.
 
@@ -56,7 +56,7 @@ def build_banking77_task(
     spelling, uniqueness, and order. No fallback or ``other`` label is added.
 
     Args:
-        config: Validated experiment configuration containing the question.
+        config: Validated task configuration containing the question.
         expected_labels: Official dataset labels in source order.
 
     Returns:
@@ -78,11 +78,7 @@ def build_banking77_task(
         raise ValueError(f"Question state_field must be {STATE_FIELD!r}")
     if question.question_id != QUESTION_ID:
         raise ValueError(f"Question id must be {QUESTION_ID!r}")
-    parsed_options = [
-        (option.label, option.use_when, option.distinguish_from) for option in question.options
-    ]
-
-    option_labels = [label for label, _, _ in parsed_options]
+    option_labels = [option.label for option in question.options]
     duplicates = sorted(label for label, count in Counter(option_labels).items() if count > 1)
     if duplicates:
         raise ValueError(f"Duplicate question option labels: {duplicates}")
@@ -97,10 +93,7 @@ def build_banking77_task(
     if option_labels != labels:
         raise ValueError("Question options must follow the dataset label order")
 
-    criteria = {
-        label: {"use_when": use_when, "distinguish_from": distinguish_from}
-        for label, use_when, distinguish_from in parsed_options
-    }
+    criteria = {option.label: option.criterion for option in question.options}
     return IntentClassificationTask(
         state_field=STATE_FIELD,
         question_id=QUESTION_ID,

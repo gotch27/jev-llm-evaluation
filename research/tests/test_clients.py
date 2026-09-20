@@ -82,11 +82,13 @@ class FakeAdapterProvider:
         fail_question=None,
         fail_once=False,
         malformed_question=None,
+        output_mode="probabilities",
     ):
         self.delay = delay
         self.fail_question = fail_question
         self.fail_once = fail_once
         self.malformed_question = malformed_question
+        self.output_mode = output_mode
         self.failed_once = False
         self.active = 0
         self.max_active = 0
@@ -110,11 +112,16 @@ class FakeAdapterProvider:
                 raise TypeSafeError("permanent failure")
             if question_id == self.malformed_question:
                 return ProviderResult(text="not JSON", input_tokens=10, output_tokens=2)
-            answer = {
-                "relevant": 0.8,
-                "intent": {"card": 0.6, "cash": 0.2},
-                "urgency": {"0": 0.1, "1": 0.2, "2": 0.7},
-            }[question_id]
+            answers = (
+                {"relevant": True, "intent": "card", "urgency": 2}
+                if self.output_mode == "label"
+                else {
+                    "relevant": 0.8,
+                    "intent": {"card": 0.6, "cash": 0.2},
+                    "urgency": {"0": 0.1, "1": 0.2, "2": 0.7},
+                }
+            )
+            answer = answers[question_id]
             return VercelGatewayProviderResult(
                 text=json.dumps({"answers": {question_id: answer}}),
                 input_tokens=10,
@@ -227,6 +234,28 @@ def test_vercel_preserves_partial_failure():
     assert result.usage.cost_usd is None
 
 
+def test_vercel_label_mode_uses_discrete_schema():
+    async def run():
+        provider = FakeAdapterProvider(output_mode="label")
+        client = VercelLLMDecisionClient(
+            provider.model_name,
+            "openai",
+            output_mode="label",
+            retry=RetryPolicy(max_retries=0),
+            _provider=provider,
+        )
+        result = await client.evaluate("A message", {"intent": QUESTIONS["intent"]})
+        await client.aclose()
+        return provider, result
+
+    provider, result = asyncio.run(run())
+    _, _, schema, _ = provider.calls[0]
+    intent_schema = schema["$defs"]["TypeSafeAnswers"]["properties"]["intent"]
+    assert intent_schema["enum"] == ["card", "cash"]
+    assert result.answers["intent"].choice == "card"
+    assert result.answers["intent"].probabilities == {"card": 1.0, "cash": 0.0}
+
+
 def test_vercel_does_not_retry_malformed_output():
     async def run():
         provider = FakeAdapterProvider(malformed_question="relevant", delay=0)
@@ -301,6 +330,8 @@ def test_missing_credentials_and_aliases_fail_before_network(monkeypatch):
         VercelLLMDecisionClient("~openai/latest", "openai")
     with pytest.raises(ValueError, match="canonical"):
         VercelLLMDecisionClient("vercel/auto", "openai")
+    with pytest.raises(ValueError, match="output_mode"):
+        VercelLLMDecisionClient("openai/exact-model", "openai", output_mode="confidence")
 
 
 def test_jev_constructs_typesafe_client_for_vercel(monkeypatch):

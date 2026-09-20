@@ -7,7 +7,7 @@ import os
 import time
 from dataclasses import dataclass
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from system_one_adapter import AsyncSystemOneAdapterClient
 from typesafe_sdk import Answer, JSONContent, Questions, RetryPolicy, TypeSafeError
@@ -43,6 +43,7 @@ class VercelLLMDecisionClient:
     Args:
         model: Canonical Vercel model identifier, excluding routing aliases.
         provider: Upstream provider slug that must serve every request.
+        output_mode: Return one label or a complete probability distribution.
         max_concurrency: Maximum active provider requests for this client.
         timeout_seconds: HTTP timeout applied to each request.
         retry: Optional TypeSafe transient retry policy.
@@ -57,6 +58,7 @@ class VercelLLMDecisionClient:
         model: str,
         provider: str,
         *,
+        output_mode: Literal["label", "probabilities"] = "probabilities",
         max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         retry: RetryPolicy | None = None,
@@ -65,6 +67,8 @@ class VercelLLMDecisionClient:
         _validate_exact_model(model)
         if not provider.strip():
             raise ValueError("provider must be nonempty")
+        if output_mode not in ("label", "probabilities"):
+            raise ValueError("output_mode must be label or probabilities")
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be at least 1")
         if timeout_seconds <= 0:
@@ -81,12 +85,13 @@ class VercelLLMDecisionClient:
             )
         self.requested_model = model
         self.requested_provider = provider
+        self.output_mode = output_mode
         self._provider = _provider
         self._retry = retry or RetryPolicy()
         self._adapter = AsyncSystemOneAdapterClient(
             structured_outputs=True,
-            llm_answer_mode="probabilities",
-            normalize_probabilities=True,
+            llm_answer_mode="discrete" if output_mode == "label" else "probabilities",
+            normalize_probabilities=output_mode == "probabilities",
             n_retry_malformed_structure=0,
             retry=self._retry,
             model=self._provider,

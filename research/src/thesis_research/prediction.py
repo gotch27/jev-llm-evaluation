@@ -84,6 +84,7 @@ async def predict_examples(
     decisions_file: TextIO,
     *,
     max_concurrency: int,
+    record_choice_details: bool = True,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Evaluate examples in bounded batches and stream ordered JSONL records.
@@ -100,6 +101,9 @@ async def predict_examples(
         predictions_file: Writable stream receiving evaluator-ready records.
         decisions_file: Writable stream receiving full diagnostic records.
         max_concurrency: Maximum examples evaluated in one active batch.
+        record_choice_details: Preserve Choice confidence and probabilities.
+            Set to false for label-only LLM output so adapter-derived one-hot
+            values are not presented as measured model confidence.
         on_progress: Optional callback invoked after each flushed batch.
 
     Returns:
@@ -128,7 +132,11 @@ async def predict_examples(
             raise
         for example, state, result in zip(batch, states, results, strict=True):
             prediction, successful = _prediction_record(
-                example.id, result, task.question_id, allowed_labels
+                example.id,
+                result,
+                task.question_id,
+                allowed_labels,
+                record_choice_details=record_choice_details,
             )
             _write_json_line(predictions_file, prediction)
             _write_json_line(
@@ -137,7 +145,10 @@ async def predict_examples(
                     "id": example.id,
                     "state": state,
                     "prediction": prediction,
-                    "decision": decision_result_to_dict(result),
+                    "decision": decision_result_to_dict(
+                        result,
+                        record_choice_details=record_choice_details,
+                    ),
                 },
             )
             summary.add(result, successful)
@@ -151,7 +162,11 @@ async def predict_examples(
     return summary.as_dict()
 
 
-def decision_result_to_dict(result: DecisionResult) -> dict[str, Any]:
+def decision_result_to_dict(
+    result: DecisionResult,
+    *,
+    record_choice_details: bool = True,
+) -> dict[str, Any]:
     """Convert a provider-neutral decision result into a JSON-safe record.
 
     Typed TypeSafe answers are serialized while raw provider diagnostics are
@@ -159,15 +174,17 @@ def decision_result_to_dict(result: DecisionResult) -> dict[str, Any]:
 
     Args:
         result: Decision result returned by the Jev or Vercel LLM client.
+        record_choice_details: Preserve Choice confidence and probabilities.
 
     Returns:
         Dictionary suitable for one ``decisions.jsonl`` record.
     """
     return {
         "answers": {
-            question_id: answer.model_dump(mode="json")
+            question_id: _answer_to_dict(answer, record_choice_details)
             for question_id, answer in result.answers.items()
         },
+        "choice_output_mode": "probabilities" if record_choice_details else "label",
         "errors": {
             question_id: _error_to_dict(error) for question_id, error in result.errors.items()
         },
@@ -199,6 +216,8 @@ def _prediction_record(
     result: DecisionResult,
     question_id: str,
     allowed_labels: set[str],
+    *,
+    record_choice_details: bool,
 ) -> tuple[dict[str, Any], bool]:
     answer = result.answers.get(question_id)
     error = result.errors.get(question_id)
@@ -213,12 +232,18 @@ def _prediction_record(
             "id": example_id,
             "error": f"Decision returned an unknown label: {answer.choice}",
         }, False
-    return {
-        "id": example_id,
-        "label": answer.choice,
-        "confidence": answer.confidence,
-        "probabilities": dict(answer.probabilities),
-    }, True
+    prediction: dict[str, Any] = {"id": example_id, "label": answer.choice}
+    if record_choice_details:
+        prediction["confidence"] = answer.confidence
+        prediction["probabilities"] = dict(answer.probabilities)
+    return prediction, True
+
+
+def _answer_to_dict(answer: object, record_choice_details: bool) -> object:
+    if isinstance(answer, ChoiceAnswer) and not record_choice_details:
+        return {"type": "choice", "choice": answer.choice}
+    model_dump = getattr(answer, "model_dump", None)
+    return model_dump(mode="json") if callable(model_dump) else answer
 
 
 def _prediction_error(error: DecisionError) -> str:

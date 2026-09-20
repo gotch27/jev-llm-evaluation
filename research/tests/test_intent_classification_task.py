@@ -4,10 +4,13 @@ from pathlib import Path
 import pytest
 from typesafe_sdk import Choice
 
-from thesis_research.config import load_experiment_config
+from thesis_research.config import load_task_config
 from thesis_research.tasks import build_banking77_task
 
-CONFIG_PATH = Path(__file__).parents[1] / "experiments" / "intent_classification" / "banking77.toml"
+CONFIG_PATH = (
+    Path(__file__).parents[1] / "experiments" / "intent_classification" / "tasks" / "banking77.toml"
+)
+WITHOUT_CRITERIA_CONFIG_PATH = CONFIG_PATH.with_name("banking77-without-criteria.toml")
 INSTRUCTIONS = (
     "Classify the supplied customer message into the single listed banking intent that best "
     "matches the customer’s primary request or problem. Use the banking feature or transaction "
@@ -98,7 +101,7 @@ LABELS = [
 
 
 def config():
-    return load_experiment_config(CONFIG_PATH)
+    return load_task_config(CONFIG_PATH)
 
 
 def with_options(base, options):
@@ -118,6 +121,7 @@ def test_builds_frozen_choice_and_state_from_official_inventory():
     assert task.questions() == {"intent": task.choice}
 
     for criterion in task.choice.criteria.values():
+        assert isinstance(criterion, dict)
         assert set(criterion) == {"use_when", "distinguish_from"}
         assert all(isinstance(value, str) and value.strip() for value in criterion.values())
 
@@ -125,6 +129,29 @@ def test_builds_frozen_choice_and_state_from_official_inventory():
     assert "reverted_card_payment?" in task.choice.criteria
     assert "PIN" in task.choice.criteria["get_physical_card"]["use_when"]
     assert "order_physical_card" in task.choice.criteria["get_physical_card"]["distinguish_from"]
+
+
+def test_passes_generic_criterion_shapes_to_typesafe_choice():
+    base = config()
+    assert base.question is not None
+    options = list(base.question.options)
+    options[0] = replace(options[0], criterion="A string criterion")
+    options[1] = replace(options[1], criterion=["first boundary", {"priority": 2}])
+    options[2] = replace(options[2], criterion=None)
+
+    task = build_banking77_task(with_options(base, options), LABELS)
+
+    assert task.choice.criteria[LABELS[0]] == "A string criterion"
+    assert task.choice.criteria[LABELS[1]] == ["first boundary", {"priority": 2}]
+    assert task.choice.criteria[LABELS[2]] is None
+
+
+def test_builds_without_criteria_variant_with_null_criteria():
+    task = build_banking77_task(load_task_config(WITHOUT_CRITERIA_CONFIG_PATH), LABELS)
+
+    assert task.choice.instructions == INSTRUCTIONS
+    assert list(task.choice.criteria) == LABELS
+    assert all(criterion is None for criterion in task.choice.criteria.values())
 
 
 def test_rejects_missing_duplicate_unexpected_and_reordered_labels():
