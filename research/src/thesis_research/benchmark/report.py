@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Sequence
 
+from thesis_research.benchmark.timing import latency_fields
 from thesis_research.benchmark.types import ModelSpec
 from thesis_research.datasets import Banking77Example
 from thesis_research.evaluation import evaluate_classification, read_prediction_jsonl
@@ -29,6 +30,7 @@ def generate_report(
     model_summaries: dict[str, dict[str, Any]] = {}
     model_outcomes: dict[str, list[dict[str, Any]]] = {}
     model_execution: dict[str, dict[str, Any]] = {}
+    model_decisions: dict[str, dict[str, dict[str, Any]]] = {}
     for model in models:
         predictions = read_prediction_jsonl(
             (run / "models" / model.id / "predictions.jsonl").read_bytes()
@@ -41,6 +43,7 @@ def generate_report(
         model_execution[model.id] = json.loads(
             (run / "models" / model.id / "summary.json").read_text(encoding="utf-8")
         )
+        model_decisions[model.id] = _read_decisions(run / "models" / model.id / "decisions.jsonl")
 
     baseline = next(model for model in models if model.backend == "jev")
     comparisons = [
@@ -53,8 +56,15 @@ def generate_report(
         for candidate in models
         if candidate.id != baseline.id
     ]
+    benchmark_metadata = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
     summary = {
         "baseline_model_id": baseline.id,
+        "runner": benchmark_metadata.get("runner"),
+        "runner_attempts": [
+            attempt.get("runner")
+            for attempt in benchmark_metadata.get("attempts", [])
+            if isinstance(attempt, dict)
+        ],
         "models": model_summaries,
         "execution": model_execution,
         "comparisons": comparisons,
@@ -74,6 +84,19 @@ def generate_report(
                 "macro_f1": model_summaries[model.id]["macro_f1"],
                 **model_summaries[model.id]["prediction_counts"],
                 "elapsed_seconds": model_execution[model.id]["elapsed_seconds"],
+                "total_elapsed_seconds": model_execution[model.id]["total_elapsed_seconds"],
+                **latency_fields(
+                    "successful_decision_latency",
+                    model_execution[model.id]["latency"]["successful_decisions"],
+                ),
+                **latency_fields(
+                    "all_decision_latency",
+                    model_execution[model.id]["latency"]["all_decisions"],
+                ),
+                **latency_fields(
+                    "provider_call_latency",
+                    model_execution[model.id]["latency"]["provider_calls"],
+                ),
                 **model_execution[model.id]["usage"],
             }
             for model in models
@@ -95,7 +118,11 @@ def generate_report(
     _write_jsonl(
         report / "model_outcomes.jsonl",
         (
-            _flat_outcome(model.id, outcome)
+            _flat_outcome(
+                model.id,
+                outcome,
+                model_decisions[model.id][outcome["id"]],
+            )
             for model in models
             for outcome in model_outcomes[model.id]
         ),
@@ -172,8 +199,14 @@ def _compare_outcomes(
     }
 
 
-def _flat_outcome(model_id: str, outcome: dict[str, Any]) -> dict[str, Any]:
+def _flat_outcome(
+    model_id: str,
+    outcome: dict[str, Any],
+    decision_record: dict[str, Any],
+) -> dict[str, Any]:
     prediction = outcome["prediction"]
+    decision = decision_record["decision"]
+    usage = decision["usage"]
     return {
         "model_id": model_id,
         "id": outcome["id"],
@@ -183,7 +216,21 @@ def _flat_outcome(model_id: str, outcome: dict[str, Any]) -> dict[str, Any]:
         "error": prediction.get("error") if prediction else None,
         "status": outcome["status"],
         "correct": outcome["correct"],
+        "latency_seconds": decision["latency_seconds"],
+        **usage,
     }
+
+
+def _read_decisions(path: Path) -> dict[str, dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        record = json.loads(line)
+        if not isinstance(record, dict) or not isinstance(record.get("id"), str):
+            raise ValueError(f"Decision line {number} has no string ID")
+        if record["id"] in records:
+            raise ValueError(f"Duplicate decision ID: {record['id']}")
+        records[record["id"]] = record
+    return records
 
 
 def _write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:

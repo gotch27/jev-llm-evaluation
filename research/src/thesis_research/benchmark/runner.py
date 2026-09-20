@@ -17,6 +17,7 @@ from thesis_research.benchmark.model_run import run_model
 from thesis_research.benchmark.plan import load_benchmark_plan
 from thesis_research.benchmark.progress import BenchmarkObserver, NullBenchmarkObserver
 from thesis_research.benchmark.report import generate_report, report_artifacts
+from thesis_research.benchmark.timing import runner_environment
 from thesis_research.benchmark.types import BenchmarkPlan
 from thesis_research.clients import DecisionClient
 from thesis_research.config import load_task_config
@@ -31,6 +32,7 @@ async def run_benchmark(
     outputs: Path,
     *,
     observer: BenchmarkObserver | None = None,
+    runner_location: str | None = None,
     _clients: dict[str, DecisionClient] | None = None,
 ) -> Path:
     """Create and execute one Jev-to-LLM benchmark.
@@ -40,6 +42,7 @@ async def run_benchmark(
     directory so the same run can be resumed without repeating completed IDs.
     """
     observer = observer if observer is not None else NullBenchmarkObserver()
+    environment = runner_environment(runner_location)
     plan = load_benchmark_plan(plan_path)
     plan_bytes = plan_path.read_bytes()
     task_bytes = plan.task_config.read_bytes()
@@ -52,6 +55,7 @@ async def run_benchmark(
         "name": plan.name,
         "timestamp": timestamp.isoformat(),
         "working_directory": str(Path.cwd()),
+        "runner": environment,
         "code": git_state(),
         "status": "started",
         "source_plan_path": str(plan_path.resolve()),
@@ -88,7 +92,17 @@ async def run_benchmark(
         metadata["split"] = plan.cohort.split
         metadata["split_examples"] = len(split_examples)
         metadata["cohort_examples"] = len(examples)
-        await _execute(run, plan, task, labels, examples, metadata, observer, _clients)
+        await _execute(
+            run,
+            plan,
+            task,
+            labels,
+            examples,
+            metadata,
+            observer,
+            environment,
+            _clients,
+        )
     except Exception as error:
         metadata["status"] = "failed"
         metadata["error"] = f"{type(error).__name__}: {error}"
@@ -107,10 +121,12 @@ async def resume_benchmark(
     data: Path,
     *,
     observer: BenchmarkObserver | None = None,
+    runner_location: str | None = None,
     _clients: dict[str, DecisionClient] | None = None,
 ) -> Path:
     """Resume only the missing model predictions in a benchmark directory."""
     observer = observer if observer is not None else NullBenchmarkObserver()
+    environment = runner_environment(runner_location)
     metadata_path = run / "metadata.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     _verify_saved_inputs(run, metadata)
@@ -133,7 +149,17 @@ async def resume_benchmark(
     metadata["dataset"] = manifest
     metadata.pop("error", None)
     try:
-        await _execute(run, plan, task, labels, examples, metadata, observer, _clients)
+        await _execute(
+            run,
+            plan,
+            task,
+            labels,
+            examples,
+            metadata,
+            observer,
+            environment,
+            _clients,
+        )
     except Exception as error:
         metadata["status"] = "failed"
         metadata["error"] = f"{type(error).__name__}: {error}"
@@ -155,13 +181,15 @@ async def _execute(
     examples: list[Banking77Example],
     metadata: dict[str, Any],
     observer: BenchmarkObserver,
+    environment: dict[str, str],
     clients: dict[str, DecisionClient] | None,
 ) -> None:
     attempt = {
         "started_at": datetime.now(UTC).isoformat(),
         "code": git_state(),
         "status": "running",
-        "command": _command(run, metadata),
+        "command": _command(run, metadata, environment["location"]),
+        "runner": environment,
     }
     metadata.setdefault("attempts", []).append(attempt)
     metadata["status"] = "running"
@@ -234,7 +262,8 @@ def _verify_saved_inputs(run: Path, metadata: dict[str, Any]) -> None:
     inputs = metadata.get("inputs")
     if not isinstance(inputs, dict):
         raise ValueError("Benchmark metadata has no saved input checksums")
-    for name in ("plan.toml", "task.toml", "cohort.json"):
+    required = ["plan.toml", "task.toml", "cohort.json"]
+    for name in required:
         expected = inputs.get(name, {}).get("sha256")
         if not isinstance(expected, str) or file_checksum(run / name) != expected:
             raise ValueError(f"Saved benchmark input changed: {name}")
@@ -250,8 +279,12 @@ def _model_statuses(run: Path, plan: BenchmarkPlan) -> dict[str, Any]:
     return statuses
 
 
-def _command(run: Path, metadata: dict[str, Any]) -> list[str]:
+def _command(run: Path, metadata: dict[str, Any], runner_location: str) -> list[str]:
     if len(metadata.get("attempts", [])) > 1:
-        return ["uv", "run", "thesis-research", "benchmark", "--resume", str(run)]
-    source = metadata.get("source_plan_path")
-    return ["uv", "run", "thesis-research", "benchmark", "--plan", str(source)]
+        command = ["uv", "run", "thesis-research", "benchmark", "--resume", str(run)]
+    else:
+        source = metadata.get("source_plan_path")
+        command = ["uv", "run", "thesis-research", "benchmark", "--plan", str(source)]
+    if runner_location != "unspecified":
+        command.extend(["--runner-location", runner_location])
+    return command

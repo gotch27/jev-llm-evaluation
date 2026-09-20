@@ -48,16 +48,28 @@ def test_cli_passes_terminal_observer_to_benchmark(monkeypatch, capsys):
         def __exit__(self, exc_type, exc, traceback):
             pass
 
-    async def fake_run_benchmark(plan, data, outputs, *, observer):
+    async def fake_run_benchmark(plan, data, outputs, *, observer, runner_location):
         assert plan == Path("plan.toml")
         assert data == Path("data")
         assert outputs == Path("outputs/benchmarks")
         assert observer is terminal_observer
+        assert runner_location == "local-mac-oslo"
         return Path("outputs/benchmarks/run")
 
     monkeypatch.setattr(cli, "BenchmarkTerminal", FakeTerminal)
     monkeypatch.setattr(cli, "run_benchmark", fake_run_benchmark)
-    monkeypatch.setattr(sys, "argv", ["thesis-research", "benchmark", "--plan", "plan.toml"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "thesis-research",
+            "benchmark",
+            "--plan",
+            "plan.toml",
+            "--runner-location",
+            "local-mac-oslo",
+        ],
+    )
 
     cli.main()
 

@@ -40,6 +40,14 @@ def test_without_criteria_smoke_plan_only_changes_the_task_variant():
     assert standard.models == without_criteria.models
 
 
+def test_timing_pilot_is_sequential_and_uses_training_data():
+    plan = load_benchmark_plan(BENCHMARKS_DIRECTORY / "banking77-timing-pilot.toml")
+
+    assert plan.cohort.split == "train"
+    assert plan.execution.example_concurrency == 1
+    assert plan.execution.model_concurrency == 1
+
+
 @pytest.fixture
 def benchmark_dataset(tmp_path):
     config = load_task_config(TASK_CONFIG)
@@ -216,6 +224,7 @@ class FakeDecisionClient:
 def write_plan(
     tmp_path,
     *,
+    split="train",
     model_concurrency=2,
     example_concurrency=3,
     llm_output_mode="label",
@@ -226,7 +235,7 @@ def write_plan(
 task_config = {json.dumps(str(TASK_CONFIG))}
 
 [cohort]
-split = "train"
+split = {json.dumps(split)}
 strategy = "stratified_random"
 size = 77
 seed = 42
@@ -328,8 +337,12 @@ def test_one_command_runs_all_models_and_writes_analysis_ready_report(
     model_metrics = read_jsonl(run / "report" / "model_metrics.jsonl")
     assert [row["model_id"] for row in model_metrics] == ["jev", "llm-a", "llm-b"]
     assert [row["correct"] for row in model_metrics] == [77, 76, 76]
+    assert all(row["successful_decision_latency_count"] in (76, 77) for row in model_metrics)
+    assert all(row["successful_decision_latency_p50_seconds"] == 0.001 for row in model_metrics)
     assert len(read_jsonl(run / "report" / "per_label_metrics.jsonl")) == 3 * 77
-    assert len(read_jsonl(run / "report" / "model_outcomes.jsonl")) == 3 * 77
+    model_outcomes = read_jsonl(run / "report" / "model_outcomes.jsonl")
+    assert len(model_outcomes) == 3 * 77
+    assert all(outcome["latency_seconds"] == 0.001 for outcome in model_outcomes)
     comparisons = read_jsonl(run / "report" / "pairwise_statistics.jsonl")
     assert [row["comparison_model_id"] for row in comparisons] == ["llm-a", "llm-b"]
     assert comparisons[0]["baseline_only_correct"] == 1
@@ -378,6 +391,45 @@ def test_one_command_runs_all_models_and_writes_analysis_ready_report(
     )
     assert ("report_started",) in observer.events
     assert observer.events[-1] == ("benchmark_completed", run)
+
+
+def test_runner_environment_and_latency_are_recorded(
+    benchmark_dataset,
+    tmp_path,
+):
+    data, labels = benchmark_dataset
+    plan = write_plan(
+        tmp_path,
+        split="test",
+        model_concurrency=1,
+        example_concurrency=1,
+    )
+    clients = {
+        model_id: FakeDecisionClient(labels, model_id=model_id)
+        for model_id in ("jev", "llm-a", "llm-b")
+    }
+    observer = RecordingObserver()
+    run = asyncio.run(
+        run_benchmark(
+            plan,
+            data,
+            tmp_path / "outputs",
+            observer=observer,
+            runner_location="local-mac-oslo",
+            _clients=clients,
+        )
+    )
+
+    for model_id, client in clients.items():
+        assert len(client.calls) == 77
+        summary = json.loads((run / "models" / model_id / "summary.json").read_text())
+        assert summary["attempted"] == 77
+        assert summary["usage"]["input_tokens"] == 770
+        assert summary["latency"]["successful_decisions"]["p95"] == 0.001
+
+    metadata = json.loads((run / "metadata.json").read_text())
+    assert metadata["runner"]["location"] == "local-mac-oslo"
+    assert metadata["attempts"][0]["runner"]["location"] == "local-mac-oslo"
 
 
 def test_failed_benchmark_resumes_only_missing_examples(benchmark_dataset, tmp_path):

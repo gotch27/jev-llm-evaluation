@@ -80,8 +80,9 @@ not fixed configuration fields. The alternative task omits every criterion.
 
 ## Benchmark TOML
 
-The runnable smoke plans are under `experiments/intent_classification/benchmarks/`. A minimal plan
-that compares Jev with one LLM has this form:
+The runnable smoke and timing-pilot plans are under
+`experiments/intent_classification/benchmarks/`. A minimal plan that compares Jev with one LLM
+has this form:
 
 ```toml
 name = "BANKING77 development comparison"
@@ -163,6 +164,11 @@ Concurrent models progress independently. For comparative latency measurements, 
 `model_concurrency = 1` so providers do not compete for local or network resources. A connectivity
 smoke check may run all configured models together.
 
+`banking77-timing-pilot.toml` is a training-only development plan with sequential model and example
+execution. It measures every selected example, including the first request, and makes no additional
+warm-up calls. It is a timing-method check, not a thesis experiment. The connectivity smoke plans
+run their models together.
+
 ### Model options
 
 Each model table supports:
@@ -193,12 +199,24 @@ uv run thesis-research inspect \
 
 # Run a new coordinated benchmark.
 uv run thesis-research benchmark \
-  --plan experiments/intent_classification/benchmarks/banking77-smoke.toml
+  --plan experiments/intent_classification/benchmarks/banking77-smoke.toml \
+  --runner-location local-mac-oslo
 
 # Resume only missing models or example IDs in an existing run.
 uv run thesis-research benchmark --resume outputs/benchmarks/RUN_DIRECTORY
 ```
 
+`--runner-location` is an optional descriptive label. Use it for measured runs, for example
+`local-mac-oslo`, `aws-eu-north-1`, or `aws-us-east-1`. It is a command option rather than a TOML
+field because the same frozen plan may be executed or resumed from different environments. Each
+attempt records its own label, operating system, machine architecture, Python version, timezone,
+and UTC offset without saving the hostname or IP address.
+
 The CLI rejects missing, unexpected, or inconsistent configuration fields before paid model work
-begins. A new run copies `plan.toml`, `task.toml`, and `cohort.json` into its output directory;
-resume verifies those frozen inputs before continuing.
+begins. A new run copies `plan.toml`, `task.toml`, and `cohort.json` into its output directory.
+Resume verifies those frozen inputs before continuing.
+
+Measured decision latencies are summarized with count, mean, population standard deviation,
+minimum, p50, p90, p95, and maximum. Percentiles use linear interpolation. The report keeps
+separate summaries for successful decisions, all decisions, and underlying provider calls, while
+`model_outcomes.jsonl` contains each measured example's end-to-end latency and usage.

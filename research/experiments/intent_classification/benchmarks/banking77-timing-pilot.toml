@@ -1,0 +1,50 @@
+name = "BANKING77 timing pilot"
+task_config = "../tasks/banking77.toml"
+
+[cohort]
+split = "train"
+strategy = "random"
+size = 10
+seed = 20260920
+
+[llm_output]
+mode = "label"
+
+[execution]
+example_concurrency = 1
+model_concurrency = 1
+
+[[models]]
+id = "jev"
+backend = "jev"
+model = "typesafe-ai/jev"
+
+[[models]]
+id = "gpt-5-4-mini"
+backend = "llm"
+model = "openai/gpt-5.4-mini"
+provider = "openai"
+
+[[models]]
+id = "claude-haiku-4-5"
+backend = "llm"
+model = "anthropic/claude-haiku-4.5"
+provider = "anthropic"
+
+[[models]]
+id = "gemini-3-flash"
+backend = "llm"
+model = "google/gemini-3-flash"
+provider = "google"
+
+[[models]]
+id = "grok-4-1-fast"
+backend = "llm"
+model = "spacexai/grok-4.1-fast-non-reasoning"
+provider = "vertex"
+
+[[models]]
+id = "deepseek-v3-2"
+backend = "llm"
+model = "deepseek/deepseek-v3.2"
+provider = "deepinfra"

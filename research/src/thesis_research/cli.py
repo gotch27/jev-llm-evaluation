@@ -25,7 +25,14 @@ def main() -> None:
         if args.command == "benchmark":
             with BenchmarkTerminal() as terminal:
                 run = (
-                    asyncio.run(resume_benchmark(args.resume, args.data_dir, observer=terminal))
+                    asyncio.run(
+                        resume_benchmark(
+                            args.resume,
+                            args.data_dir,
+                            observer=terminal,
+                            runner_location=args.runner_location,
+                        )
+                    )
                     if args.resume is not None
                     else asyncio.run(
                         run_benchmark(
@@ -33,6 +40,7 @@ def main() -> None:
                             args.data_dir,
                             args.output_dir,
                             observer=terminal,
+                            runner_location=args.runner_location,
                         )
                     )
                 )
@@ -65,6 +73,10 @@ def _build_parser() -> argparse.ArgumentParser:
     source.add_argument("--resume", type=Path, metavar="RUN_DIRECTORY")
     benchmark.add_argument("--data-dir", type=Path, default=Path("data"))
     benchmark.add_argument("--output-dir", type=Path, default=DEFAULT_BENCHMARK_OUTPUT)
+    benchmark.add_argument(
+        "--runner-location",
+        help="Recorded location label such as local-mac-oslo or aws-us-east-1",
+    )
     return parser
 
 

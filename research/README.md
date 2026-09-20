@@ -260,6 +260,11 @@ provider = "openai"
 same training split, random seed, cohort size, models, and LLM output mode, so both smoke plans
 select the same example and differ only in the task definition.
 
+`banking77-timing-pilot.toml` is a separate training-only timing-method check. It runs models and
+examples sequentially and measures every selected example, including the first request. It makes
+no additional warm-up calls. It is not a thesis experiment, and its provisional model list must
+not be treated as the final comparison set.
+
 The plan requires exactly one Jev entry and at least one LLM. Model IDs are stable local names used
 in file paths and reports. LLM providers are pinned; Jev is pinned to TypeSafe's Vercel provider by
 the client. `cohort.split` must be `train` or `test`. `random` selects any requested number of
@@ -283,8 +288,13 @@ After preparing the data and setting `AI_GATEWAY_API_KEY`, run:
 
 ```sh
 uv run thesis-research benchmark \
-  --plan experiments/intent_classification/benchmarks/banking77-smoke.toml
+  --plan experiments/intent_classification/benchmarks/banking77-smoke.toml \
+  --runner-location local-mac-oslo
 ```
+
+`--runner-location` is an optional descriptive label, not an inferred location. Use it for measured
+runs. Each attempt records the label, operating system, architecture, Python version, timezone, and
+UTC offset without saving a hostname or IP address.
 
 The command prints a unique directory under `outputs/benchmarks/`. Every model receives the exact
 same saved cohort. A benchmark cannot accidentally compare 300 Jev examples with 600 LLM examples.
@@ -307,11 +317,10 @@ one example at a time; with a larger value, it advances by that batch size. Mode
 independently and do not wait for one another between batches. If `model_concurrency` is smaller
 than the number of configured models, queued models remain visibly marked as waiting.
 
-The displayed rate measures completed examples divided by that model's elapsed run time. `valid`
-means the provider returned a structurally valid allowed label; it does not mean the prediction was
-correct. `elapsed` is the model run's wall-clock time, including client setup, response validation,
-record serialization, and cleanup. The narrower provider-call latency is recorded separately in
-`decisions.jsonl`. Accuracy and F1 are calculated only in the final report. When output is
+The displayed rate measures completed examples divided by measured prediction time. `valid` means
+the provider returned a structurally valid allowed label; it does not mean the prediction was
+correct. Model summaries separately retain total attempt time, measured prediction time, decision
+latency, and provider-call latency. Accuracy and F1 are calculated only in the final report. When output is
 redirected or the terminal does not support live rendering, progress bars are disabled
 automatically and concise lifecycle and failure logs remain on standard error. Standard output
 still ends with only the run directory, making it safe to capture in a shell script. Use PyCharm's
@@ -324,7 +333,7 @@ it is evaluated as incorrect rather than silently retried during resume.
 In PyCharm, use module `thesis_research.cli`, working directory `research/`, and parameters such as:
 
 ```text
-benchmark --plan experiments/intent_classification/benchmarks/banking77-smoke.toml
+benchmark --plan experiments/intent_classification/benchmarks/banking77-smoke.toml --runner-location local-mac-oslo
 ```
 
 Each parent benchmark contains:
@@ -351,18 +360,20 @@ selected label, timing, usage, routing, raw response, and diagnostics for each c
 mode additionally preserves the distribution, normalization details, and confidence. Jev records
 its native distribution in both modes. Raw diagnostics can contain adapter internals, but they are
 not treated as a model-reported confidence in label mode. No API keys are saved. Model summaries
-record progress and aggregate usage; incomplete provider usage becomes `null` instead of an
-understated total. Model metadata records its output mode. Parent metadata records the dataset
-provenance, exact inputs and checksums, code revision, dirty-tree flag, attempts, and status of
-every model.
+record progress, measured and total elapsed time, latency distributions, and measured usage;
+incomplete provider usage becomes `null` instead of an understated total. Model metadata records
+its output mode. Parent metadata records the dataset
+provenance, exact inputs and checksums, code revision, dirty-tree flag, runner environment,
+attempts, and status of every model.
 
 The report is generated automatically after every model has completed. It contains no graphs. Its
 JSON and JSONL files preserve the values needed to create graphs later:
 
-- `model_metrics.jsonl`: accuracy, macro-F1, correct and status counts, elapsed time, token usage,
-  retry counts, and reported cost per model.
+- `model_metrics.jsonl`: accuracy, macro-F1, correct and status counts, measured and total elapsed
+  time, p50/p90/p95 and other latency statistics, token usage, retry counts, and reported cost.
 - `per_label_metrics.jsonl`: precision, recall, F1, and support for every model-label pair.
-- `model_outcomes.jsonl`: one correctness/status row per model and example.
+- `model_outcomes.jsonl`: one correctness/status row per model and example, including end-to-end
+  latency and usage.
 - `pairwise_statistics.jsonl`: Jev versus each LLM, including accuracy difference, the paired
   correctness contingency table, valid-label agreement, and the exact two-sided McNemar p-value.
 - `summary.json`: the complete metrics above plus every model's confusion matrix.
@@ -372,6 +383,11 @@ predictions. Macro-F1 is the unweighted mean of all 77 intent F1 scores. Confusi
 reference labels; columns are predicted labels plus `<unsuccessful>`. The McNemar result tests the
 paired difference in correctness because the models see the same examples. These saved tables can
 later be loaded into pandas, R, or plotting software without repeating paid calls.
+
+Latency summaries include successful decisions, all decisions, and individual provider calls.
+They report count, mean, population standard deviation, minimum, p50, p90, p95, and maximum using
+linear-interpolated percentiles. Failed calls remain visible in the all-decision and provider-call
+summaries rather than silently disappearing.
 
 Vercel currently exposes Jev as the unversioned `typesafe-ai/jev` identifier. Run records preserve
 the requested identifier, response-reported model and provider, timestamp, raw response, and code
@@ -387,6 +403,8 @@ results.
 - `src/thesis_research/clients/`: shared result contracts plus Jev and Vercel AI Gateway clients.
 - `src/thesis_research/prediction.py`: bounded prediction and result serialization.
 - `src/thesis_research/benchmark/`: plans, shared cohorts, resumable model runs, and reports.
+- `src/thesis_research/benchmark/model_records.py`: model-record validation and metric summaries.
+- `src/thesis_research/benchmark/timing.py`: runner provenance and latency statistics.
 - `src/thesis_research/benchmark/progress.py`: typed benchmark progress notifications.
 - `src/thesis_research/terminal.py`: Rich progress rows and human-readable event logs.
 - `src/thesis_research/evaluation/`: provider-independent prediction parsing and metrics.
