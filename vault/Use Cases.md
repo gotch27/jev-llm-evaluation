@@ -17,7 +17,7 @@ Direction clarified on 2026-09-18: discuss TypeSafe's published evaluations as b
 
 ### Our use cases
 
-- [Intent Classification](Use%20Cases/Intent%20Classification.md) — first independent use case, agreed on 2026-09-18. BANKING77 and the reusable evaluation foundation are confirmed; the final model set and thesis benchmark configuration remain open.
+- [Intent Classification](Use%20Cases/Intent%20Classification.md) — first independent use case, agreed on 2026-09-18. BANKING77 and the reusable evaluation foundation are confirmed; a training-only candidate comparison is in progress, while the final model set and thesis benchmark remain open.
 
 ## TypeSafe evaluation methodology
 

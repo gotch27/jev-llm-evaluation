@@ -40,7 +40,7 @@ Select specific tasks and combinations together rather than committing to one ap
 
 Develop shared modules for calling the Jev and LLM APIs, handling task inputs and datasets, running experiments, and logging and evaluating results. Reuse these modules across experiments and combined workflows. Keep implementation in `research/` within this repository, with raw outputs in ignored output directories or external storage, and link them from the vault.
 
-The initial standalone foundation is implemented for BANKING77: pinned data preparation, shared structured Jev/LLM clients, task and benchmark configuration, frozen cohorts, coordinated and resumable execution, evaluation reports, terminal progress, per-example and provider-call timing, and runner-environment provenance. This establishes reusable components but does not itself constitute a thesis experiment or result.
+The initial standalone foundation is implemented for BANKING77: pinned data preparation, shared structured Jev/LLM clients, task and benchmark configuration, frozen cohorts, coordinated and resumable execution, recoverable provider errors, evaluation reports, terminal progress, per-example and provider-call timing, runner-environment provenance, and gateway-reported cost capture. This establishes reusable components but does not itself constitute a thesis experiment or result.
 
 ### Optional demonstration
 
@@ -58,16 +58,16 @@ A small application demonstrating a selected use case is an optional extension. 
 
 ## Milestones and next actions
 
-TypeSafe's four published workflow evaluations, indexed in [Use Cases — Use cases](Use%20Cases.md#use-cases), remain background before our independent experiments. Intent classification with BANKING77 is selected as the first standalone use case, and its practical foundation is implemented. No thesis evaluation has been run.
+TypeSafe's four published workflow evaluations, indexed in [Use Cases — Use cases](Use%20Cases.md#use-cases), remain background before our independent experiments. Intent classification with BANKING77 is selected as the first standalone use case, and its practical foundation is implemented. A training-only candidate plan now compares Jev, GPT-5.6 Luna, Gemini 2.5 Flash Lite, and Qwen 3.5 Flash on a stratified cohort of 770 messages. Its first Jev attempt was interrupted by gateway timeouts and provider-capacity errors before any LLM candidate ran; this is development evidence about execution reliability, not a thesis result. No thesis evaluation has been run.
 
-The next milestone is to freeze the first thesis benchmark: select the comparison models and providers, decide the task variant and LLM output mode, choose the test cohort, decide the execution host and number of latency repetitions, establish a cost source, and create a dedicated evaluation plan. Development remains on the training split until those decisions are complete. Run the standalone evaluation before selecting or implementing a combined Jev–LLM workflow.
+The next milestone is to recover and complete the training-only candidate comparison, inspect its quality, latency, failure, and cost records, and choose which candidates advance. Then freeze the first thesis benchmark by deciding the task variant and LLM output mode, test cohort, execution host, latency repetitions, and treatment of missing cost data. Development remains on the training split until those decisions are complete. Run the standalone evaluation before selecting or implementing a combined Jev–LLM workflow.
 
 ## Open questions
 
-- Which Jev and LLM model/provider versions will form the first BANKING77 comparison?
+- Which of the development candidates will form the final BANKING77 comparison?
 - Will the final comparison use the criteria task, the without-criteria task, or treat their difference as a separate experiment?
 - Will LLMs return labels or complete probability distributions in the final comparison?
 - Will the evaluation use the complete BANKING77 test split or a frozen predefined sample?
 - Which execution host and number of repetitions will be used for the final latency comparison?
-- How will cost be obtained when gateway responses omit it?
+- How will missing cost be handled when a gateway response does not include `usage.cost`?
 - Which standalone use case follows intent classification, and which completed standalone task is most suitable for a later combined workflow?

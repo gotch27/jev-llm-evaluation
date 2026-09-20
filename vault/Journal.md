@@ -8,6 +8,12 @@ Use authorized dated entries to retain decisions and their reasons, mentor feedb
 
 Add entries newest first when Gorazd authorizes saving them. Include the date, the agreed decision or change, its reason, and any approved follow-up actions.
 
+### 2026-09-20 — Candidate selection and recoverable provider failures
+
+Added the training-only BANKING77 candidate plan in code commit `ba6cf69`. It uses the criteria task, exact-label LLM output, a seeded stratified cohort of 770 training messages with 10 examples per intent, and sequential model and example execution. The development candidates are Jev, GPT-5.6 Luna through OpenAI at low reasoning, Gemini 2.5 Flash Lite through Google with reasoning disabled, and Qwen 3.5 Flash through Alibaba with reasoning disabled. These configurations support model selection and are not yet the frozen thesis comparison.
+
+The first development attempt was interrupted during Jev after 315 saved calls: 298 valid responses, 12 gateway timeouts, and 5 provider-capacity errors. No LLM candidate had started. The [preserved run](../research/outputs/benchmarks/20260920T173035363058Z-ec3686cd1df144adaebd77e45f6ddf64/) records `local-mac-oslo` and commit `3656c99` with uncommitted configuration changes. Treat this as an operational failure record, not model-quality evidence. Commit `193316d` added opt-in `--retry-errors` recovery: it archives full failed attempts, retains successful predictions, and retries failed plus unfinished IDs. Next: resume after provider capacity settles, complete candidate selection, and only then freeze the held-out thesis evaluation.
+
 ### 2026-09-20 — Reproducible latency records without warm-up calls
 
 Extended the coordinated BANKING77 benchmark in code commit `12d2f0c` to preserve per-example end-to-end latency, provider-call latency, measured and total execution time, p50/p90/p95 and other distribution statistics, and runner-environment provenance. Added a ten-example training-only timing pilot that runs models and examples sequentially to reduce local contention. Decided to measure every selected example, including the first request, without additional warm-up calls: warm-ups were unnecessary for quality evaluation and could add cost, provider-specific caching effects, and methodological complexity. No thesis experiment has been run. Next: choose the final execution host and repetition count together with the remaining benchmark decisions.

@@ -2,7 +2,7 @@
 
 [← Use cases](../Use%20Cases.md)
 
-Agreed on 2026-09-18 as our first independent use case. Evaluate Jev and LLMs separately on assigning a user message to one predefined intent. BANKING77 is confirmed for the initial implementation; the final comparison models and thesis-run configuration remain undecided.
+Agreed on 2026-09-18 as our first independent use case. Evaluate Jev and LLMs separately on assigning a user message to one predefined intent. BANKING77 is confirmed for the initial implementation. A training-only candidate comparison is configured; the final thesis models and evaluation configuration remain undecided.
 
 ## Purpose
 
@@ -25,7 +25,7 @@ Two versioned task variants currently exist:
 
 The singular `criterion` value is configurable as a string, object, array, or omission. The task builder converts the options into TypeSafe's outer `{label: criterion}` criteria mapping and verifies that the 77 labels match the pinned dataset exactly and in source order.
 
-Task TOMLs contain the dataset revision, state field, question, instruction, labels, and optional criteria. Benchmark TOMLs separately select the split and cohort, models, LLM output format, and concurrency. See the [research configuration reference](../../research/CONFIGURATION.md) for the complete fields and examples.
+Task TOMLs contain the dataset revision, state field, question, instruction, labels, and optional criteria. Benchmark TOMLs separately select the split and cohort, models, LLM output format, per-model reasoning effort, and concurrency. See the [research configuration reference](../../research/CONFIGURATION.md) for the complete fields and examples.
 
 ## Comparison approach
 
@@ -59,7 +59,7 @@ Reports are stored as JSON and tidy JSONL tables suitable for later statistical 
 
 ## Implementation status
 
-The practical foundation is implemented in [`research/`](../../research/README.md), through code commit `12d2f0c`:
+The practical foundation is implemented in [`research/`](../../research/README.md), through code commit `193316d`:
 
 - pinned dataset preparation and verification;
 - validated task and benchmark TOMLs;
@@ -69,6 +69,7 @@ The practical foundation is implemented in [`research/`](../../research/README.m
 - per-example and provider-call timing with analysis-ready latency distributions;
 - a sequential, training-only timing pilot with explicit runner-location metadata and no warm-up calls;
 - terminal progress rows and persistent failure logs;
+- explicit recovery that archives failed provider attempts and retries only failed or unfinished IDs while retaining successful predictions;
 - offline tests for dataset handling, configuration, model clients, prediction failures, evaluation, resumption, timing, and reporting.
 
 Implementation readiness does not constitute a completed experiment.
@@ -79,7 +80,13 @@ After establishing standalone results, investigate whether sending uncertain Jev
 
 ## Experiments
 
-No thesis experiment has been run yet. The existing smoke plans are development and connectivity configurations. The ten-example timing pilot is also a training-only development check, not a recorded thesis experiment. Record the eventual frozen configuration and run using [Use Cases — Experiment records](../Use%20Cases.md#experiment-records).
+No thesis experiment has been run yet. The existing smoke plans are development and connectivity configurations. The ten-example timing pilot is also a training-only development check, not a recorded thesis experiment.
+
+The [candidate model-selection plan](../../research/experiments/intent_classification/benchmarks/banking77-model-selection.toml) uses the criteria task, label-only LLM output, and a seeded stratified training cohort of 770 messages: 10 per intent. It runs models and examples sequentially. The development candidates are Jev, GPT-5.6 Luna through OpenAI with low reasoning, Gemini 2.5 Flash Lite through Google with reasoning disabled, and Qwen 3.5 Flash through Alibaba with reasoning disabled. Candidate configurations are not yet final thesis models.
+
+The first development attempt on 2026-09-20 was interrupted during Jev after 315 saved attempts: 298 valid responses and 17 infrastructure failures, comprising 12 gateway timeouts and 5 provider-capacity errors. No LLM candidate had started. This is an operational record, not model-quality evidence. The preserved [run directory](../../research/outputs/benchmarks/20260920T173035363058Z-ec3686cd1df144adaebd77e45f6ddf64/) records commit `3656c99` with a dirty working tree and the `local-mac-oslo` runner. Resume will use `--retry-errors` from commit `193316d`, which archives failed attempts before retrying them and unfinished IDs.
+
+Record the eventual frozen configuration and thesis run using [Use Cases — Experiment records](../Use%20Cases.md#experiment-records).
 
 ## Results
 
@@ -91,10 +98,10 @@ Add interpretation and limitations after the frozen evaluation has been run.
 
 ## Still to decide
 
-- Final Jev and LLM model identifiers and pinned providers.
+- Which development candidates advance to the final Jev-versus-LLM comparison.
 - Whether the criteria and without-criteria tasks are both thesis experiments or one is only developmental.
 - LLM output mode for the final comparison.
 - Full test split or a predefined test sample.
 - Execution host and repetition count for a defensible latency comparison; model and example execution are sequential for comparative timing.
-- Reliable cost measurement when a provider does not report cost directly.
+- How to handle a final run if a provider omits direct cost data.
 - Whether confidence calibration or uncertainty routing will be studied later.
