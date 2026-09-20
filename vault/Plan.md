@@ -40,7 +40,7 @@ Select specific tasks and combinations together rather than committing to one ap
 
 Develop shared modules for calling the Jev and LLM APIs, handling task inputs and datasets, running experiments, and logging and evaluating results. Reuse these modules across experiments and combined workflows. Keep implementation in `research/` within this repository, with raw outputs in ignored output directories or external storage, and link them from the vault.
 
-The initial standalone foundation is implemented for BANKING77: pinned data preparation, shared structured Jev/LLM clients, task and benchmark configuration, frozen cohorts, coordinated and resumable execution, evaluation reports, and terminal progress. This establishes reusable components but does not itself constitute a thesis experiment or result.
+The initial standalone foundation is implemented for BANKING77: pinned data preparation, shared structured Jev/LLM clients, task and benchmark configuration, frozen cohorts, coordinated and resumable execution, evaluation reports, terminal progress, per-example and provider-call timing, and runner-environment provenance. This establishes reusable components but does not itself constitute a thesis experiment or result.
 
 ### Optional demonstration
 
@@ -51,6 +51,7 @@ A small application demonstrating a selected use case is an optional extension. 
 - Compare result quality, response time, and execution cost on the selected tasks.
 - For standalone comparisons, give Jev and the LLMs the same task, inputs, and output requirements, and assess correctness against reference labels.
 - For intent classification, calculate accuracy, macro-F1, per-label metrics, confusion matrices, unsuccessful prediction counts, and paired Jev-versus-LLM comparisons over the same cohort. Preserve machine-readable per-example outcomes for later analysis and visualization.
+- Record every selected example's latency, including the first request, without additional warm-up calls. Preserve measured and total execution time, provider-call latency, runner environment, and distribution statistics such as p50, p90, and p95. Use sequential execution when comparing latency so local contention does not distort the models differently.
 - Then evaluate combined workflows against the standalone baselines, preferably on the same tasks and datasets, accounting for the quality, time, and cost of the entire workflow. Assess trade-offs rather than assume the combination is better.
 - Make experiments repeatable by recording datasets and splits, model versions, prompts, configuration, code revisions, commands, and output locations.
 - Preserve failed and inconclusive results, and use the evidence to explain strengths and limitations and formulate practical recommendations.
@@ -59,7 +60,7 @@ A small application demonstrating a selected use case is an optional extension. 
 
 TypeSafe's four published workflow evaluations, indexed in [Use Cases — Use cases](Use%20Cases.md#use-cases), remain background before our independent experiments. Intent classification with BANKING77 is selected as the first standalone use case, and its practical foundation is implemented. No thesis evaluation has been run.
 
-The next milestone is to freeze the first thesis benchmark: select the comparison models and providers, decide the task variant and LLM output mode, choose the test cohort, define the latency and cost procedure, and create a dedicated evaluation plan. Development remains on the training split until those decisions are complete. Run the standalone evaluation before selecting or implementing a combined Jev–LLM workflow.
+The next milestone is to freeze the first thesis benchmark: select the comparison models and providers, decide the task variant and LLM output mode, choose the test cohort, decide the execution host and number of latency repetitions, establish a cost source, and create a dedicated evaluation plan. Development remains on the training split until those decisions are complete. Run the standalone evaluation before selecting or implementing a combined Jev–LLM workflow.
 
 ## Open questions
 
@@ -67,5 +68,6 @@ The next milestone is to freeze the first thesis benchmark: select the compariso
 - Will the final comparison use the criteria task, the without-criteria task, or treat their difference as a separate experiment?
 - Will LLMs return labels or complete probability distributions in the final comparison?
 - Will the evaluation use the complete BANKING77 test split or a frozen predefined sample?
-- How will latency be measured and repeated, and how will cost be obtained when gateway responses omit it?
+- Which execution host and number of repetitions will be used for the final latency comparison?
+- How will cost be obtained when gateway responses omit it?
 - Which standalone use case follows intent classification, and which completed standalone task is most suitable for a later combined workflow?

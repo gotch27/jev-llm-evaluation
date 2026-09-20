@@ -50,22 +50,26 @@ The implemented evaluator records:
 - macro-F1 across all 77 labels;
 - per-label precision, recall, F1, and support;
 - a confusion matrix with a separate unsuccessful column;
-- elapsed time, provider-call timing, token usage, reported cost, retries, and failures when available;
+- per-example end-to-end latency and provider-call latency, including failed decisions;
+- measured and total execution time plus mean, standard deviation, minimum, p50, p90, p95, and maximum latency;
+- runner-environment provenance, token usage, reported cost, retries, and failures when available;
 - paired Jev-versus-LLM correctness, accuracy difference, valid-label agreement, and the exact two-sided McNemar p-value.
 
 Reports are stored as JSON and tidy JSONL tables suitable for later statistical analysis and visualization. Graph generation is intentionally deferred.
 
 ## Implementation status
 
-The practical foundation is implemented in [`research/`](../../research/README.md), through code commit `b4d8d16`:
+The practical foundation is implemented in [`research/`](../../research/README.md), through code commit `12d2f0c`:
 
 - pinned dataset preparation and verification;
 - validated task and benchmark TOMLs;
 - shared asynchronous Jev and LLM decision clients through Vercel AI Gateway;
 - coordinated multi-model cohorts with bounded concurrency and resumable execution;
 - durable prediction, diagnostic, provenance, and metric records;
+- per-example and provider-call timing with analysis-ready latency distributions;
+- a sequential, training-only timing pilot with explicit runner-location metadata and no warm-up calls;
 - terminal progress rows and persistent failure logs;
-- offline tests for dataset handling, configuration, model clients, prediction failures, evaluation, resumption, and reporting.
+- offline tests for dataset handling, configuration, model clients, prediction failures, evaluation, resumption, timing, and reporting.
 
 Implementation readiness does not constitute a completed experiment.
 
@@ -75,7 +79,7 @@ After establishing standalone results, investigate whether sending uncertain Jev
 
 ## Experiments
 
-No thesis experiment has been run yet. The existing smoke plans are development and connectivity configurations, not recorded thesis experiments. Record the eventual frozen configuration and run using [Use Cases — Experiment records](../Use%20Cases.md#experiment-records).
+No thesis experiment has been run yet. The existing smoke plans are development and connectivity configurations. The ten-example timing pilot is also a training-only development check, not a recorded thesis experiment. Record the eventual frozen configuration and run using [Use Cases — Experiment records](../Use%20Cases.md#experiment-records).
 
 ## Results
 
@@ -91,6 +95,6 @@ Add interpretation and limitations after the frozen evaluation has been run.
 - Whether the criteria and without-criteria tasks are both thesis experiments or one is only developmental.
 - LLM output mode for the final comparison.
 - Full test split or a predefined test sample.
-- Concurrency and repetition procedure for defensible latency comparison.
+- Execution host and repetition count for a defensible latency comparison; model and example execution are sequential for comparative timing.
 - Reliable cost measurement when a provider does not report cost directly.
 - Whether confidence calibration or uncertainty routing will be studied later.

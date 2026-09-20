@@ -40,7 +40,7 @@ For each experiment, record:
 - **Question:** what we want to learn.
 - **Setup:** task, dataset and split, models and versions, prompts or configuration, and comparison conditions.
 - **Measures:** metrics and how they are calculated.
-- **Run:** date, code commit, commands, and links to raw outputs.
+- **Run:** date, code commit, commands, runner environment, and links to raw outputs.
 - **Results:** observations, including failed or inconclusive runs.
 - **Interpretation:** what the evidence supports, limitations, and next steps.
 

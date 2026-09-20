@@ -8,6 +8,10 @@ Use authorized dated entries to retain decisions and their reasons, mentor feedb
 
 Add entries newest first when Gorazd authorizes saving them. Include the date, the agreed decision or change, its reason, and any approved follow-up actions.
 
+### 2026-09-20 — Reproducible latency records without warm-up calls
+
+Extended the coordinated BANKING77 benchmark in code commit `12d2f0c` to preserve per-example end-to-end latency, provider-call latency, measured and total execution time, p50/p90/p95 and other distribution statistics, and runner-environment provenance. Added a ten-example training-only timing pilot that runs models and examples sequentially to reduce local contention. Decided to measure every selected example, including the first request, without additional warm-up calls: warm-ups were unnecessary for quality evaluation and could add cost, provider-specific caching effects, and methodological complexity. No thesis experiment has been run. Next: choose the final execution host and repetition count together with the remaining benchmark decisions.
+
 ### 2026-09-20 — Coordinated standalone benchmark foundation
 
 Implemented the first reusable comparison pipeline for [intent classification](Use%20Cases/Intent%20Classification.md). A benchmark freezes one BANKING77 cohort and sends it to exactly one Jev configuration and one or more LLM configurations, preventing comparisons over different samples. It supports bounded model and example concurrency, interrupted-run resumption, explicit failed predictions, terminal progress, and paired machine-readable reports for later statistics and visualization. LLM output is configurable as an exact label or complete probability distribution; Jev retains its native distribution. No thesis experiment has been run. Next: choose the final models, task variant, output mode, test cohort, latency procedure, and cost source before creating the first evaluation plan.
