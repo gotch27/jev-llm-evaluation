@@ -80,7 +80,7 @@ not fixed configuration fields. The alternative task omits every criterion.
 
 ## Benchmark TOML
 
-The runnable smoke and timing-pilot plans are under
+The runnable smoke, timing-pilot, and model-selection plans are under
 `experiments/intent_classification/benchmarks/`. A minimal plan that compares Jev with one LLM
 has this form:
 
@@ -111,6 +111,7 @@ id = "example-llm"
 backend = "llm"
 model = "creator/model-id"
 provider = "provider-slug"
+reasoning_effort = "low"
 ```
 
 ### Top-level fields
@@ -169,6 +170,11 @@ execution. It measures every selected example, including the first request, and 
 warm-up calls. It is a timing-method check, not a thesis experiment. The connectivity smoke plans
 run their models together.
 
+`banking77-model-selection.toml` is also development work rather than the final test. It selects a
+fixed stratified cohort of 770 training messages: 10 examples for each of the 77 intents. Models and
+examples run sequentially to make latency comparisons easier to interpret. Run the one-example
+smoke plan first, then use its recorded costs and failures before starting model selection.
+
 ### Model options
 
 Each model table supports:
@@ -179,9 +185,16 @@ Each model table supports:
 | `backend` | yes | `"jev"` or `"llm"` | Selects the client implementation. |
 | `model` | yes | nonempty canonical Vercel model ID | Requested model. Prefer a versioned ID when available. |
 | `provider` | only for LLMs | nonempty provider slug | Pins the upstream LLM provider. It must be omitted for Jev. |
+| `reasoning_effort` | no; LLMs only | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"` | Sends an explicit Vercel reasoning effort. Omission leaves the provider default unchanged. |
 
 Virtual model aliases and provider fallback lists are not supported. The selected LLM model and
-provider must support native JSON-schema output.
+provider must support native JSON-schema output. The chosen model must also support any configured
+reasoning effort. Jev rejects this field because its behavior is controlled by its own API.
+
+For reproducible comparisons, set `reasoning_effort` explicitly when the model supports it. The
+current candidate plans use `low` for GPT-5.6 Luna and `none` for Gemini 2.5 Flash Lite and Qwen
+3.5 Flash. The setting is copied into every run, saved in model metadata, sent in the request, and
+included in `report/model_metrics.jsonl`.
 
 ## Commands
 
@@ -202,8 +215,18 @@ uv run thesis-research benchmark \
   --plan experiments/intent_classification/benchmarks/banking77-smoke.toml \
   --runner-location local-mac-oslo
 
+# After inspecting the smoke run, compare candidates on 10 training examples per intent.
+uv run thesis-research benchmark \
+  --plan experiments/intent_classification/benchmarks/banking77-model-selection.toml \
+  --runner-location local-mac-oslo
+
 # Resume only missing models or example IDs in an existing run.
 uv run thesis-research benchmark --resume outputs/benchmarks/RUN_DIRECTORY
+
+# Also archive and retry IDs with saved provider errors.
+uv run thesis-research benchmark \
+  --resume outputs/benchmarks/RUN_DIRECTORY \
+  --retry-errors
 ```
 
 `--runner-location` is an optional descriptive label. Use it for measured runs, for example
@@ -215,8 +238,15 @@ and UTC offset without saving the hostname or IP address.
 The CLI rejects missing, unexpected, or inconsistent configuration fields before paid model work
 begins. A new run copies `plan.toml`, `task.toml`, and `cohort.json` into its output directory.
 Resume verifies those frozen inputs before continuing.
+By default, saved error predictions remain final attempts. `--retry-errors` archives their complete
+prediction and decision records in each model's `retry_history.jsonl`, removes them from the active
+records, and retries only those IDs plus any unfinished IDs. Successful predictions are never
+repeated. Use this only after the original benchmark process has stopped.
 
 Measured decision latencies are summarized with count, mean, population standard deviation,
 minimum, p50, p90, p95, and maximum. Percentiles use linear interpolation. The report keeps
 separate summaries for successful decisions, all decisions, and underlying provider calls, while
 `model_outcomes.jsonl` contains each measured example's end-to-end latency and usage.
+Vercel's per-request `usage.cost` is accumulated into model summaries when present, so the smoke
+run can be used to estimate a larger run. Missing provider cost data remains `null` rather than
+being treated as zero.

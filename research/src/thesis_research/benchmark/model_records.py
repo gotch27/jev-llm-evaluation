@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -85,6 +87,75 @@ def validate_model_records(
     for example_id, decision in decisions.items():
         if decision.get("prediction") != predictions[example_id]:
             raise ValueError(f"Prediction differs from decision record for {example_id}")
+
+
+def archive_error_records_for_retry(directory: Path) -> tuple[str, ...]:
+    """Archive failed provider attempts and remove them from active model records.
+
+    Successful records remain untouched, so a resumed benchmark calls the
+    provider only for previously failed and unfinished example IDs. The full
+    failed prediction and decision records are retained in ``retry_history.jsonl``.
+    """
+    predictions, decisions = load_model_records(directory)
+    failed_ids = tuple(
+        example_id
+        for example_id, prediction in predictions.items()
+        if isinstance(prediction.get("error"), str)
+    )
+    if not failed_ids:
+        return ()
+
+    archived_at = datetime.now(UTC).isoformat()
+    history_path = directory / "retry_history.jsonl"
+    history = history_path.read_text(encoding="utf-8") if history_path.exists() else ""
+    history += "".join(
+        json.dumps(
+            {
+                "archived_at": archived_at,
+                "id": example_id,
+                "prediction": predictions[example_id],
+                "decision": decisions[example_id],
+            },
+            ensure_ascii=False,
+        )
+        + "\n"
+        for example_id in failed_ids
+    )
+    _replace_text(history_path, history)
+
+    failed = set(failed_ids)
+    _replace_jsonl(
+        directory / "predictions.jsonl",
+        (record for example_id, record in predictions.items() if example_id not in failed),
+    )
+    _replace_jsonl(
+        directory / "decisions.jsonl",
+        (record for example_id, record in decisions.items() if example_id not in failed),
+    )
+    metadata_path = directory / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata.setdefault("error_retries", []).append(
+        {
+            "prepared_at": archived_at,
+            "count": len(failed_ids),
+            "example_ids": list(failed_ids),
+        }
+    )
+    metadata["status"] = "pending"
+    metadata["progress"] = None
+    write_json(metadata_path, metadata)
+    return failed_ids
+
+
+def _replace_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:
+    content = "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records)
+    _replace_text(path, content)
+
+
+def _replace_text(path: Path, content: str) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.replace(path)
 
 
 def summarize_model_records(
@@ -178,7 +249,7 @@ def model_artifacts(directory: Path) -> dict[str, dict[str, str]]:
     """Return checksums for all model artifacts currently present."""
     return artifact_metadata(
         directory,
-        ("predictions.jsonl", "decisions.jsonl", "summary.json"),
+        ("predictions.jsonl", "decisions.jsonl", "retry_history.jsonl", "summary.json"),
     )
 
 

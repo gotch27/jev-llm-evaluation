@@ -74,3 +74,42 @@ def test_cli_passes_terminal_observer_to_benchmark(monkeypatch, capsys):
     cli.main()
 
     assert capsys.readouterr().out.strip() == "outputs/benchmarks/run"
+
+
+def test_cli_passes_retry_errors_to_resume(monkeypatch, capsys):
+    terminal_observer = object()
+
+    class FakeTerminal:
+        def __enter__(self):
+            return terminal_observer
+
+        def __exit__(self, exc_type, exc, traceback):
+            pass
+
+    async def fake_resume(run, data, *, observer, runner_location, retry_errors):
+        assert run == Path("outputs/benchmarks/run")
+        assert data == Path("data")
+        assert observer is terminal_observer
+        assert runner_location == "local-mac-oslo"
+        assert retry_errors is True
+        return run
+
+    monkeypatch.setattr(cli, "BenchmarkTerminal", FakeTerminal)
+    monkeypatch.setattr(cli, "resume_benchmark", fake_resume)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "thesis-research",
+            "benchmark",
+            "--resume",
+            "outputs/benchmarks/run",
+            "--retry-errors",
+            "--runner-location",
+            "local-mac-oslo",
+        ],
+    )
+
+    cli.main()
+
+    assert capsys.readouterr().out.strip() == "outputs/benchmarks/run"

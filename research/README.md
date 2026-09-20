@@ -222,7 +222,7 @@ cohort and a list of models.
 ## Run a coordinated benchmark
 
 `experiments/intent_classification/benchmarks/banking77-smoke.toml` is a one-example connectivity
-check. It references the shared task and calls Jev plus five LLMs:
+check. It references the shared task and calls Jev plus the three candidate LLMs:
 
 ```toml
 name = "BANKING77 smoke benchmark"
@@ -239,7 +239,7 @@ mode = "label"
 
 [execution]
 example_concurrency = 1
-model_concurrency = 6
+model_concurrency = 4
 
 [[models]]
 id = "jev"
@@ -247,27 +247,36 @@ backend = "jev"
 model = "typesafe-ai/jev"
 
 [[models]]
-id = "gpt-5-4-mini"
+id = "gpt-5-6-luna"
 backend = "llm"
-model = "openai/gpt-5.4-mini"
+model = "openai/gpt-5.6-luna"
 provider = "openai"
+reasoning_effort = "low"
 
-# The file also contains Claude Haiku 4.5, Gemini 3 Flash,
-# Grok 4.1 Fast Non-Reasoning, and DeepSeek V3.2.
+# The file also contains Gemini 2.5 Flash Lite and Qwen 3.5 Flash,
+# both with reasoning_effort = "none".
 ```
 
 `banking77-without-criteria-smoke.toml` uses the task without criteria. It deliberately keeps the
 same training split, random seed, cohort size, models, and LLM output mode, so both smoke plans
 select the same example and differ only in the task definition.
 
-`banking77-timing-pilot.toml` is a separate training-only timing-method check. It runs models and
-examples sequentially and measures every selected example, including the first request. It makes
-no additional warm-up calls. It is not a thesis experiment, and its provisional model list must
-not be treated as the final comparison set.
+`banking77-timing-pilot.toml` is a separate training-only timing-method check using 10 random
+examples. It runs models and examples sequentially and measures every selected example, including
+the first request. It makes no additional warm-up calls and is not a thesis experiment.
+
+`banking77-model-selection.toml` compares the same candidates on a deterministic, stratified
+training cohort of 770 messages: 10 examples from each of the 77 intents. This is development data
+for choosing the final comparison models. It is not the final held-out result, and it does not use
+the reserved test split. Run the smoke plan and inspect its recorded costs and errors before
+starting this larger plan.
 
 The plan requires exactly one Jev entry and at least one LLM. Model IDs are stable local names used
 in file paths and reports. LLM providers are pinned; Jev is pinned to TypeSafe's Vercel provider by
-the client. `cohort.split` must be `train` or `test`. `random` selects any requested number of
+the client. An LLM can set `reasoning_effort` to `none`, `minimal`, `low`, `medium`, `high`, or
+`xhigh`; omission leaves the provider default unchanged. The current candidate plans set
+Luna to `low` and disable reasoning for Gemini Flash Lite and Qwen Flash. Jev does not accept this
+field. `cohort.split` must be `train` or `test`. `random` selects any requested number of
 examples and is suitable for smoke checks. `stratified_random` requires at least 77 examples and
 selects every intent before adding a second example from any intent. A seed makes either selection
 repeatable. Use `strategy = "all"` without `size` or `seed` when the complete configured split
@@ -280,15 +289,25 @@ the software does not choose a mode implicitly. The setting does not change Jev'
 and label mode does not produce a confidence value.
 
 `example_concurrency` bounds active examples inside each model run. `model_concurrency` bounds how
-many models run at the same time. The smoke plan uses `6`, so Jev and all five LLMs are called
-together. For quality runs, use `1` to avoid cross-model load affecting latency. The chosen
-execution settings are saved with the benchmark.
+many models run at the same time. The smoke plan uses `4`, so Jev and all three LLMs are called
+together. The model-selection plan uses `1` for both settings so latency measurements are not
+affected by local competition between candidates. The chosen execution settings are saved with
+the benchmark.
 
 After preparing the data and setting `AI_GATEWAY_API_KEY`, run:
 
 ```sh
 uv run thesis-research benchmark \
   --plan experiments/intent_classification/benchmarks/banking77-smoke.toml \
+  --runner-location local-mac-oslo
+```
+
+If all four smoke rows complete with valid predictions, inspect the generated model summaries and
+then run the training-only candidate comparison:
+
+```sh
+uv run thesis-research benchmark \
+  --plan experiments/intent_classification/benchmarks/banking77-model-selection.toml \
   --runner-location local-mac-oslo
 ```
 
@@ -305,6 +324,17 @@ are preserved. Resume that same benchmark with:
 ```sh
 uv run thesis-research benchmark --resume RUN_DIRECTORY
 ```
+
+If transient gateway failures such as exhausted 429 or 504 retries were saved as explicit errors,
+archive those failed attempts and retry their IDs during resume:
+
+```sh
+uv run thesis-research benchmark --resume RUN_DIRECTORY --retry-errors
+```
+
+Successful predictions are retained. The removed error prediction and its complete decision
+diagnostics are appended to `models/<model-id>/retry_history.jsonl`, so recovery does not erase the
+original provider failure. Use this option only after the original process has stopped.
 
 In an interactive terminal, the CLI keeps one progress row per model. Each row shows whether the
 model is waiting, running, done, or failed; completed examples; structurally valid and failed
@@ -327,8 +357,9 @@ still ends with only the run directory, making it safe to capture in a shell scr
 Terminal tool window when you want the full live display.
 
 Resume verifies that `plan.toml`, `task.toml`, and `cohort.json` have not changed. It calls only the
-models and example IDs still missing. An explicit error prediction is a completed provider attempt;
-it is evaluated as incorrect rather than silently retried during resume.
+models and example IDs still missing. By default, an explicit error prediction is a completed
+provider attempt and is evaluated as incorrect. `--retry-errors` is the explicit recovery path for
+transient infrastructure failures.
 
 In PyCharm, use module `thesis_research.cli`, working directory `research/`, and parameters such as:
 
@@ -346,6 +377,7 @@ metadata.json
 models/<model-id>/metadata.json
 models/<model-id>/predictions.jsonl
 models/<model-id>/decisions.jsonl
+models/<model-id>/retry_history.jsonl  # only when saved errors were retried
 models/<model-id>/summary.json
 report/summary.json
 report/model_metrics.jsonl
@@ -360,9 +392,11 @@ selected label, timing, usage, routing, raw response, and diagnostics for each c
 mode additionally preserves the distribution, normalization details, and confidence. Jev records
 its native distribution in both modes. Raw diagnostics can contain adapter internals, but they are
 not treated as a model-reported confidence in label mode. No API keys are saved. Model summaries
-record progress, measured and total elapsed time, latency distributions, and measured usage;
-incomplete provider usage becomes `null` instead of an understated total. Model metadata records
-its output mode. Parent metadata records the dataset
+record progress, measured and total elapsed time, latency distributions, and measured usage. The
+Vercel `usage.cost` value is accumulated when the gateway supplies it, which lets a smoke run inform
+the budget for a larger cohort. Incomplete provider usage becomes `null` instead of an understated
+total. Model metadata records its output mode and any explicit reasoning effort. Parent metadata
+records the dataset
 provenance, exact inputs and checksums, code revision, dirty-tree flag, runner environment,
 attempts, and status of every model.
 

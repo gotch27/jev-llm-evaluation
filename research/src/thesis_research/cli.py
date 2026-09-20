@@ -23,6 +23,8 @@ def main() -> None:
     args = parser.parse_args()
     try:
         if args.command == "benchmark":
+            if args.retry_errors and args.resume is None:
+                raise ValueError("--retry-errors requires --resume")
             with BenchmarkTerminal() as terminal:
                 run = (
                     asyncio.run(
@@ -31,6 +33,7 @@ def main() -> None:
                             args.data_dir,
                             observer=terminal,
                             runner_location=args.runner_location,
+                            retry_errors=args.retry_errors,
                         )
                     )
                     if args.resume is not None
@@ -76,6 +79,11 @@ def _build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument(
         "--runner-location",
         help="Recorded location label such as local-mac-oslo or aws-us-east-1",
+    )
+    benchmark.add_argument(
+        "--retry-errors",
+        action="store_true",
+        help="On resume, archive failed attempts and retry their example IDs",
     )
     return parser
 

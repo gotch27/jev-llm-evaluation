@@ -48,6 +48,21 @@ def test_timing_pilot_is_sequential_and_uses_training_data():
     assert plan.execution.model_concurrency == 1
 
 
+def test_model_selection_plan_is_stratified_and_freezes_reasoning_settings():
+    plan = load_benchmark_plan(BENCHMARKS_DIRECTORY / "banking77-model-selection.toml")
+
+    assert plan.cohort == CohortSpec("train", "stratified_random", 770, 20260920)
+    assert plan.execution.example_concurrency == 1
+    assert plan.execution.model_concurrency == 1
+    assert [model.id for model in plan.models] == [
+        "jev",
+        "gpt-5-6-luna",
+        "gemini-2-5-flash-lite",
+        "qwen3-5-flash",
+    ]
+    assert [model.reasoning_effort for model in plan.models] == [None, "low", "none", "none"]
+
+
 @pytest.fixture
 def benchmark_dataset(tmp_path):
     config = load_task_config(TASK_CONFIG)
@@ -285,6 +300,40 @@ def test_plan_rejects_invalid_split_and_llm_output_mode(tmp_path):
         load_benchmark_plan(invalid_split)
 
 
+def test_plan_validates_reasoning_effort(tmp_path):
+    valid = write_plan(tmp_path)
+    valid.write_text(
+        valid.read_text().replace(
+            'provider = "creator"',
+            'provider = "creator"\nreasoning_effort = "low"',
+            1,
+        )
+    )
+    loaded = load_benchmark_plan(valid)
+    assert loaded.models[1].reasoning_effort == "low"
+
+    invalid = write_plan(tmp_path)
+    invalid.write_text(
+        invalid.read_text().replace(
+            'provider = "creator"',
+            'provider = "creator"\nreasoning_effort = "extreme"',
+            1,
+        )
+    )
+    with pytest.raises(ValueError, match="reasoning_effort"):
+        load_benchmark_plan(invalid)
+
+    jev = write_plan(tmp_path)
+    jev.write_text(
+        jev.read_text().replace(
+            'model = "typesafe-ai/jev"',
+            'model = "typesafe-ai/jev"\nreasoning_effort = "none"',
+        )
+    )
+    with pytest.raises(ValueError, match="cannot set reasoning_effort for Jev"):
+        load_benchmark_plan(jev)
+
+
 def read_jsonl(path):
     return [json.loads(line) for line in path.read_text().splitlines()]
 
@@ -337,6 +386,7 @@ def test_one_command_runs_all_models_and_writes_analysis_ready_report(
     model_metrics = read_jsonl(run / "report" / "model_metrics.jsonl")
     assert [row["model_id"] for row in model_metrics] == ["jev", "llm-a", "llm-b"]
     assert [row["correct"] for row in model_metrics] == [77, 76, 76]
+    assert all(row["reasoning_effort"] is None for row in model_metrics)
     assert all(row["successful_decision_latency_count"] in (76, 77) for row in model_metrics)
     assert all(row["successful_decision_latency_p50_seconds"] == 0.001 for row in model_metrics)
     assert len(read_jsonl(run / "report" / "per_label_metrics.jsonl")) == 3 * 77
@@ -468,6 +518,54 @@ def test_failed_benchmark_resumes_only_missing_examples(benchmark_dataset, tmp_p
 
     # A completed run is idempotent and does not need clients or API credentials.
     assert asyncio.run(resume_benchmark(run, data)) == run
+
+
+def test_resume_can_archive_error_predictions_and_retry_only_unsuccessful_ids(
+    benchmark_dataset,
+    tmp_path,
+):
+    data, labels = benchmark_dataset
+    plan = write_plan(tmp_path, model_concurrency=1, example_concurrency=1)
+    initial_clients = {
+        "jev": FakeDecisionClient(labels, model_id="jev"),
+        "llm-a": FakeDecisionClient(
+            labels,
+            model_id="llm-a",
+            failed_indexes={1},
+            raise_at=3,
+        ),
+        "llm-b": FakeDecisionClient(labels, model_id="llm-b"),
+    }
+    outputs = tmp_path / "outputs"
+    with pytest.raises(ValueError, match="preserved record"):
+        asyncio.run(run_benchmark(plan, data, outputs, _clients=initial_clients))
+
+    run = next(outputs.iterdir())
+    saved = read_jsonl(run / "models" / "llm-a" / "predictions.jsonl")
+    assert len(saved) == 3
+    assert saved[1]["id"] == "train:2"
+    assert "error" in saved[1]
+
+    resumed_llm = FakeDecisionClient(labels, model_id="llm-a")
+    asyncio.run(
+        resume_benchmark(
+            run,
+            data,
+            retry_errors=True,
+            _clients={"llm-a": resumed_llm},
+        )
+    )
+
+    assert len(resumed_llm.calls) == 75
+    predictions = read_jsonl(run / "models" / "llm-a" / "predictions.jsonl")
+    assert len(predictions) == 77
+    assert all("label" in prediction for prediction in predictions)
+    history = read_jsonl(run / "models" / "llm-a" / "retry_history.jsonl")
+    assert len(history) == 1
+    assert history[0]["id"] == "train:2"
+    assert "error" in history[0]["prediction"]
+    metadata = json.loads((run / "models" / "llm-a" / "metadata.json").read_text())
+    assert metadata["error_retries"][0]["example_ids"] == ["train:2"]
 
 
 def test_resume_rejects_changed_frozen_inputs(benchmark_dataset, tmp_path):

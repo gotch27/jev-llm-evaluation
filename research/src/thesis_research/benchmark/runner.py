@@ -13,6 +13,7 @@ from thesis_research.benchmark.cohort import (
     examples_from_cohort,
     select_banking77_cohort,
 )
+from thesis_research.benchmark.model_records import archive_error_records_for_retry
 from thesis_research.benchmark.model_run import run_model
 from thesis_research.benchmark.plan import load_benchmark_plan
 from thesis_research.benchmark.progress import BenchmarkObserver, NullBenchmarkObserver
@@ -122,14 +123,30 @@ async def resume_benchmark(
     *,
     observer: BenchmarkObserver | None = None,
     runner_location: str | None = None,
+    retry_errors: bool = False,
     _clients: dict[str, DecisionClient] | None = None,
 ) -> Path:
-    """Resume only the missing model predictions in a benchmark directory."""
+    """Resume missing predictions, optionally retrying archived error records."""
     observer = observer if observer is not None else NullBenchmarkObserver()
     environment = runner_environment(runner_location)
     metadata_path = run / "metadata.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     _verify_saved_inputs(run, metadata)
+    if retry_errors:
+        if metadata.get("status") == "completed":
+            raise ValueError("A completed benchmark report cannot retry error records")
+        retried = {
+            directory.name: list(archive_error_records_for_retry(directory))
+            for directory in sorted((run / "models").iterdir())
+            if directory.is_dir()
+        }
+        metadata.setdefault("error_retry_preparations", []).append(
+            {
+                "prepared_at": datetime.now(UTC).isoformat(),
+                "models": {model: ids for model, ids in retried.items() if ids},
+            }
+        )
+        write_json(metadata_path, metadata)
     if metadata.get("status") == "completed":
         return run
     plan = load_benchmark_plan(run / "plan.toml", task_config_override=run / "task.toml")
