@@ -91,6 +91,7 @@ async def run_model(
             spec.provider,
             max_concurrency=example_concurrency,
             llm_output_mode=llm_output_mode,
+            reasoning_effort=spec.reasoning_effort,
         )
 
         def record_progress(progress: dict[str, Any]) -> None:

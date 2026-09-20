@@ -12,7 +12,7 @@ mode = "label"
 
 [execution]
 example_concurrency = 1
-model_concurrency = 6
+model_concurrency = 4
 
 [[models]]
 id = "jev"
@@ -20,31 +20,22 @@ backend = "jev"
 model = "typesafe-ai/jev"
 
 [[models]]
-id = "gpt-5-4-mini"
+id = "gpt-5-6-luna"
 backend = "llm"
-model = "openai/gpt-5.4-mini"
+model = "openai/gpt-5.6-luna"
 provider = "openai"
+reasoning_effort = "low"
 
 [[models]]
-id = "claude-haiku-4-5"
+id = "gemini-2-5-flash-lite"
 backend = "llm"
-model = "anthropic/claude-haiku-4.5"
-provider = "anthropic"
-
-[[models]]
-id = "gemini-3-flash"
-backend = "llm"
-model = "google/gemini-3-flash"
+model = "google/gemini-2.5-flash-lite"
 provider = "google"
+reasoning_effort = "none"
 
 [[models]]
-id = "grok-4-1-fast"
+id = "qwen3-5-flash"
 backend = "llm"
-model = "spacexai/grok-4.1-fast-non-reasoning"
-provider = "vertex"
-
-[[models]]
-id = "deepseek-v3-2"
-backend = "llm"
-model = "deepseek/deepseek-v3.2"
-provider = "deepinfra"
+model = "alibaba/qwen3.5-flash"
+provider = "alibaba"
+reasoning_effort = "none"

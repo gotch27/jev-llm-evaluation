@@ -11,6 +11,7 @@ from typesafe_sdk import TypeSafeError
 from thesis_research.clients.contracts import DEFAULT_TIMEOUT_SECONDS
 
 VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1"
+REASONING_EFFORTS = frozenset({"none", "minimal", "low", "medium", "high", "xhigh"})
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,8 @@ class VercelGatewayProvider(AsyncOpenAIProvider):
         model_name: Canonical Vercel model identifier.
         provider_name: Only upstream provider allowed to serve the request.
         api_key: Vercel AI Gateway credential passed directly to the HTTP client.
+        reasoning_effort: Explicit provider reasoning effort, or ``None`` to
+            leave the setting unspecified.
         timeout_seconds: HTTP timeout applied to each request.
         _client: Optional OpenAI-compatible client injected by offline tests.
     """
@@ -52,11 +55,15 @@ class VercelGatewayProvider(AsyncOpenAIProvider):
         provider_name: str,
         api_key: str,
         *,
+        reasoning_effort: str | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         _client: Any | None = None,
     ) -> None:
+        if reasoning_effort is not None and reasoning_effort not in REASONING_EFFORTS:
+            raise ValueError(f"Unsupported reasoning effort: {reasoning_effort}")
         self.model_name = model_name
         self.provider_name = provider_name
+        self.reasoning_effort = reasoning_effort
         self.api = "chat_completions"
         self._client = _client or openai.AsyncOpenAI(
             api_key=api_key,
@@ -88,6 +95,15 @@ class VercelGatewayProvider(AsyncOpenAIProvider):
         """
         if not structured:
             raise ValueError("Vercel AI Gateway evaluations require native structured output")
+        extra_body: dict[str, Any] = {
+            "providerOptions": {
+                "gateway": {
+                    "only": [self.provider_name],
+                }
+            }
+        }
+        if self.reasoning_effort is not None:
+            extra_body["reasoning"] = {"effort": self.reasoning_effort}
         request: dict[str, Any] = {
             "model": self.model_name,
             "messages": [asdict(message) for message in messages],
@@ -95,13 +111,7 @@ class VercelGatewayProvider(AsyncOpenAIProvider):
                 "type": "json_schema",
                 "json_schema": {"name": "evaluation", "schema": schema, "strict": True},
             },
-            "extra_body": {
-                "providerOptions": {
-                    "gateway": {
-                        "only": [self.provider_name],
-                    }
-                }
-            },
+            "extra_body": extra_body,
         }
         with translating(self.translate_error):
             response = await self._client.chat.completions.create(**request)
@@ -140,13 +150,24 @@ def _resolved_provider(raw: dict[str, Any], requested_provider: str) -> str:
 
 
 def _cost(raw: dict[str, Any]) -> float | None:
-    cost = _gateway_metadata(raw).get("cost")
-    if isinstance(cost, int | float | str):
-        try:
-            return float(cost)
-        except ValueError:
-            return None
+    usage = raw.get("usage")
+    if isinstance(usage, dict):
+        parsed = _numeric_value(usage.get("cost"))
+        if parsed is not None:
+            return parsed
+    parsed = _numeric_value(_gateway_metadata(raw).get("cost"))
+    if parsed is not None:
+        return parsed
     return None
+
+
+def _numeric_value(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
 def _gateway_metadata(raw: dict[str, Any]) -> dict[str, Any]:

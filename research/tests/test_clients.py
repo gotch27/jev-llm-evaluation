@@ -332,6 +332,13 @@ def test_missing_credentials_and_aliases_fail_before_network(monkeypatch):
         VercelLLMDecisionClient("vercel/auto", "openai")
     with pytest.raises(ValueError, match="output_mode"):
         VercelLLMDecisionClient("openai/exact-model", "openai", output_mode="confidence")
+    with pytest.raises(ValueError, match="reasoning effort"):
+        VercelLLMDecisionClient(
+            "openai/exact-model",
+            "openai",
+            reasoning_effort="extreme",
+            _provider=FakeAdapterProvider(),
+        )
 
 
 def test_jev_constructs_typesafe_client_for_vercel(monkeypatch):
@@ -399,10 +406,9 @@ class FakeCompletions:
             model_dump=lambda **kwargs: {
                 "id": "generation-1",
                 "model": "openai/exact-model-2026-09-01",
-                "usage": {"prompt_tokens": 7, "completion_tokens": 3},
+                "usage": {"prompt_tokens": 7, "completion_tokens": 3, "cost": 0.004},
                 "provider_metadata": {
                     "gateway": {
-                        "cost": "0.004",
                         "routing": {
                             "canonicalSlug": "openai/exact-model-2026-09-01",
                             "resolvedProvider": "openai",
@@ -430,6 +436,7 @@ def test_vercel_provider_sends_strict_pinned_request_and_keeps_raw_response():
             "openai/exact-model-2026-09-01",
             "openai",
             "unused-test-key",
+            reasoning_effort="low",
             _client=fake,
         )
         result = await provider.request(
@@ -444,7 +451,10 @@ def test_vercel_provider_sends_strict_pinned_request_and_keeps_raw_response():
     request = fake.chat.completions.request
     assert request["response_format"]["type"] == "json_schema"
     assert request["response_format"]["json_schema"]["strict"] is True
-    assert request["extra_body"] == {"providerOptions": {"gateway": {"only": ["openai"]}}}
+    assert request["extra_body"] == {
+        "providerOptions": {"gateway": {"only": ["openai"]}},
+        "reasoning": {"effort": "low"},
+    }
     assert "models" not in json.dumps(request) and "api_key" not in str(request)
     assert result.resolved_model == "openai/exact-model-2026-09-01"
     assert result.resolved_provider == "openai"

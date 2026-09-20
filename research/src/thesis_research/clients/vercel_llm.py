@@ -23,6 +23,7 @@ from thesis_research.clients.contracts import (
     unique_non_null,
 )
 from thesis_research.clients.vercel_provider import (
+    REASONING_EFFORTS,
     VercelGatewayProvider,
 )
 
@@ -44,6 +45,8 @@ class VercelLLMDecisionClient:
         model: Canonical Vercel model identifier, excluding routing aliases.
         provider: Upstream provider slug that must serve every request.
         output_mode: Return one label or a complete probability distribution.
+        reasoning_effort: Explicit provider reasoning effort, or ``None`` to
+            leave the setting unspecified.
         max_concurrency: Maximum active provider requests for this client.
         timeout_seconds: HTTP timeout applied to each request.
         retry: Optional TypeSafe transient retry policy.
@@ -59,6 +62,7 @@ class VercelLLMDecisionClient:
         provider: str,
         *,
         output_mode: Literal["label", "probabilities"] = "probabilities",
+        reasoning_effort: str | None = None,
         max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         retry: RetryPolicy | None = None,
@@ -69,6 +73,8 @@ class VercelLLMDecisionClient:
             raise ValueError("provider must be nonempty")
         if output_mode not in ("label", "probabilities"):
             raise ValueError("output_mode must be label or probabilities")
+        if reasoning_effort is not None and reasoning_effort not in REASONING_EFFORTS:
+            raise ValueError(f"Unsupported reasoning effort: {reasoning_effort}")
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be at least 1")
         if timeout_seconds <= 0:
@@ -81,11 +87,13 @@ class VercelLLMDecisionClient:
                 model,
                 provider,
                 api_key,
+                reasoning_effort=reasoning_effort,
                 timeout_seconds=timeout_seconds,
             )
         self.requested_model = model
         self.requested_provider = provider
         self.output_mode = output_mode
+        self.reasoning_effort = reasoning_effort
         self._provider = _provider
         self._retry = retry or RetryPolicy()
         self._adapter = AsyncSystemOneAdapterClient(

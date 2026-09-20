@@ -78,6 +78,7 @@ def generate_report(
                 "backend": model.backend,
                 "model": model.model,
                 "provider": model.provider,
+                "reasoning_effort": model.reasoning_effort,
                 "total": model_summaries[model.id]["total"],
                 "correct": model_summaries[model.id]["correct"],
                 "accuracy": model_summaries[model.id]["accuracy"],

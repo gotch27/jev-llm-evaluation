@@ -15,9 +15,11 @@ from thesis_research.benchmark.types import (
     LLMOutputMode,
     LLMOutputSpec,
     ModelSpec,
+    ReasoningEffort,
 )
 
 _MODEL_ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
+_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
 
 
 def load_benchmark_plan(
@@ -131,7 +133,10 @@ def _parse_model(value: object, index: int) -> ModelSpec:
     if not isinstance(value, dict):
         raise ValueError(f"Model {index} must be a table")
     _require_fields(
-        value, {"id", "backend", "model"}, {"id", "backend", "model", "provider"}, f"Model {index}"
+        value,
+        {"id", "backend", "model"},
+        {"id", "backend", "model", "provider", "reasoning_effort"},
+        f"Model {index}",
     )
     model_id = _nonempty_string(value["id"], f"Model {index} id")
     if _MODEL_ID.fullmatch(model_id) is None:
@@ -149,11 +154,21 @@ def _parse_model(value: object, index: int) -> ModelSpec:
         raise ValueError(f"Model {index} cannot set a provider for Jev")
     if backend == "llm" and provider is None:
         raise ValueError(f"Model {index} requires a pinned provider")
+    reasoning_value = value.get("reasoning_effort")
+    if reasoning_value is not None and (
+        not isinstance(reasoning_value, str) or reasoning_value not in _REASONING_EFFORTS
+    ):
+        raise ValueError(
+            f"Model {index} reasoning_effort must be one of {sorted(_REASONING_EFFORTS)}"
+        )
+    if backend == "jev" and reasoning_value is not None:
+        raise ValueError(f"Model {index} cannot set reasoning_effort for Jev")
     return ModelSpec(
         id=model_id,
         backend=cast(Backend, backend),
         model=_nonempty_string(value["model"], f"Model {index} model"),
         provider=provider,
+        reasoning_effort=cast(ReasoningEffort | None, reasoning_value),
     )
 
 

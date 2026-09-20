@@ -12,6 +12,7 @@ def create_decision_client(
     *,
     max_concurrency: int,
     llm_output_mode: str = "probabilities",
+    reasoning_effort: str | None = None,
 ) -> DecisionClient:
     """Create a decision client for one configured model backend.
 
@@ -21,6 +22,8 @@ def create_decision_client(
         provider: Pinned Vercel AI Gateway provider, or ``None`` for Jev.
         max_concurrency: Shared upper bound on active provider requests.
         llm_output_mode: LLM answer format; ignored by the Jev backend.
+        reasoning_effort: Explicit Vercel reasoning effort for an LLM, or
+            ``None`` to leave the setting unspecified.
 
     Returns:
         An unopened asynchronous client ready for context-manager use.
@@ -32,6 +35,8 @@ def create_decision_client(
     if backend == "jev":
         if provider is not None:
             raise ValueError("--provider is only valid with the llm backend")
+        if reasoning_effort is not None:
+            raise ValueError("reasoning_effort is only valid with the llm backend")
         return JevDecisionClient(model, max_concurrency=max_concurrency)
     if backend == "llm":
         if provider is None or not provider.strip():
@@ -40,6 +45,7 @@ def create_decision_client(
             model,
             provider,
             output_mode=llm_output_mode,
+            reasoning_effort=reasoning_effort,
             max_concurrency=max_concurrency,
         )
     raise ValueError("backend must be jev or llm")

@@ -1,10 +1,10 @@
-name = "BANKING77 without-criteria smoke benchmark"
-task_config = "../tasks/banking77-without-criteria.toml"
+name = "BANKING77 candidate model selection"
+task_config = "../tasks/banking77.toml"
 
 [cohort]
 split = "train"
-strategy = "random"
-size = 1
+strategy = "stratified_random"
+size = 770
 seed = 20260920
 
 [llm_output]
@@ -12,7 +12,7 @@ mode = "label"
 
 [execution]
 example_concurrency = 1
-model_concurrency = 4
+model_concurrency = 1
 
 [[models]]
 id = "jev"

@@ -8,6 +8,7 @@ Backend = Literal["jev", "llm"]
 DatasetSplit = Literal["train", "test"]
 CohortStrategy = Literal["all", "random", "stratified_random"]
 LLMOutputMode = Literal["label", "probabilities"]
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
 
 
 @dataclass(frozen=True)
@@ -18,15 +19,19 @@ class ModelSpec:
     backend: Backend
     model: str
     provider: str | None
+    reasoning_effort: ReasoningEffort | None = None
 
     def as_dict(self) -> dict[str, str | None]:
         """Return the model settings in a JSON-safe form."""
-        return {
+        values = {
             "id": self.id,
             "backend": self.backend,
             "model": self.model,
             "provider": self.provider,
         }
+        if self.reasoning_effort is not None:
+            values["reasoning_effort"] = self.reasoning_effort
+        return values
 
 
 @dataclass(frozen=True)
