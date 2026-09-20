@@ -86,6 +86,7 @@ async def predict_examples(
     max_concurrency: int,
     record_choice_details: bool = True,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
+    on_prediction: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Evaluate examples in bounded batches and stream ordered JSONL records.
 
@@ -105,6 +106,7 @@ async def predict_examples(
             Set to false for label-only LLM output so adapter-derived one-hot
             values are not presented as measured model confidence.
         on_progress: Optional callback invoked after each flushed batch.
+        on_prediction: Optional callback invoked for each completed prediction.
 
     Returns:
         JSON-safe counts, elapsed time, routing, and aggregate usage.
@@ -152,6 +154,8 @@ async def predict_examples(
                 },
             )
             summary.add(result, successful)
+            if on_prediction is not None:
+                on_prediction(prediction)
         predictions_file.flush()
         decisions_file.flush()
         summary.elapsed_seconds = time.perf_counter() - started

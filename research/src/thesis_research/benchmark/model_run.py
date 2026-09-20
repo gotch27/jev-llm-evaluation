@@ -8,6 +8,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Sequence
 
+from thesis_research.benchmark.progress import (
+    BenchmarkObserver,
+    ModelProgress,
+    NullBenchmarkObserver,
+)
 from thesis_research.benchmark.types import ModelSpec
 from thesis_research.clients import DecisionClient, create_decision_client
 from thesis_research.datasets import Banking77Example
@@ -35,6 +40,7 @@ async def run_model(
     example_concurrency: int,
     llm_output_mode: str,
     client: DecisionClient | None = None,
+    observer: BenchmarkObserver | None = None,
 ) -> dict[str, Any]:
     """Complete the missing predictions for one benchmark model.
 
@@ -42,6 +48,7 @@ async def run_model(
     resumed run calls the provider only for IDs absent from both durable JSONL
     files. The function validates the two files before appending anything.
     """
+    observer = observer if observer is not None else NullBenchmarkObserver()
     directory.mkdir(parents=True, exist_ok=True)
     metadata_path = directory / "metadata.json"
     recorded_output_mode = "native_probabilities" if spec.backend == "jev" else llm_output_mode
@@ -54,14 +61,17 @@ async def run_model(
     predictions, decisions = _load_records(directory)
     expected_ids = {example.id for example in examples}
     _validate_completed_records(predictions, decisions, expected_ids)
+    previous_summary = _summarize(directory, len(examples), labels, metadata)
+    observer.model_started(spec.id, ModelProgress.from_summary(previous_summary))
     remaining = [example for example in examples if example.id not in predictions]
     if not remaining:
-        summary = _summarize(directory, len(examples), labels, metadata)
+        summary = previous_summary
         write_json(directory / "summary.json", summary)
         metadata["progress"] = summary
         metadata["status"] = "completed"
         metadata["artifacts"] = _artifacts(directory)
         write_json(metadata_path, metadata)
+        observer.model_completed(spec.id, ModelProgress.from_summary(summary))
         return summary
 
     attempt = {
@@ -74,7 +84,6 @@ async def run_model(
     metadata.pop("error", None)
     write_json(metadata_path, metadata)
     started = time.perf_counter()
-    previous_summary = _summarize(directory, len(examples), labels, metadata)
     try:
         decision_client = client or create_decision_client(
             spec.backend,
@@ -85,8 +94,15 @@ async def run_model(
         )
 
         def record_progress(progress: dict[str, Any]) -> None:
-            metadata["progress"] = _merge_progress(previous_summary, progress)
+            merged = _merge_progress(previous_summary, progress)
+            metadata["progress"] = merged
             write_json(metadata_path, metadata)
+            observer.model_progress(spec.id, ModelProgress.from_summary(merged))
+
+        def record_prediction(prediction: dict[str, Any]) -> None:
+            error = prediction.get("error")
+            if isinstance(error, str):
+                observer.prediction_failed(spec.id, prediction["id"], error)
 
         async with decision_client:
             with (directory / "predictions.jsonl").open("a", encoding="utf-8") as output:
@@ -101,6 +117,7 @@ async def run_model(
                         max_concurrency=example_concurrency,
                         record_choice_details=recorded_output_mode != "label",
                         on_progress=record_progress,
+                        on_prediction=record_prediction,
                     )
         attempt["elapsed_seconds"] = time.perf_counter() - started
         attempt["finished_at"] = datetime.now(UTC).isoformat()
@@ -109,6 +126,7 @@ async def run_model(
         write_json(directory / "summary.json", summary)
         metadata["progress"] = summary
         metadata["status"] = "completed"
+        observer.model_completed(spec.id, ModelProgress.from_summary(summary))
         return summary
     except Exception as error:
         attempt["status"] = "failed"

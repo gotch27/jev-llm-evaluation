@@ -12,6 +12,7 @@ from typesafe_sdk import ChoiceAnswer
 from thesis_research.benchmark import resume_benchmark, run_benchmark
 from thesis_research.benchmark.cohort import select_banking77_cohort
 from thesis_research.benchmark.plan import load_benchmark_plan
+from thesis_research.benchmark.progress import ModelProgress, NullBenchmarkObserver
 from thesis_research.benchmark.report import exact_mcnemar_p_value
 from thesis_research.benchmark.types import CohortSpec
 from thesis_research.clients import CallRecord, DecisionError, DecisionResult, UsageTotals
@@ -72,6 +73,38 @@ def benchmark_dataset(tmp_path):
 class Activity:
     active_models: int = 0
     max_active_models: int = 0
+
+
+class RecordingObserver(NullBenchmarkObserver):
+    def __init__(self):
+        self.events = []
+
+    def benchmark_started(self, name, run, model_ids, total_examples):
+        self.events.append(("benchmark_started", name, tuple(model_ids), total_examples))
+
+    def model_started(self, model_id, progress):
+        self.events.append(("model_started", model_id, progress))
+
+    def model_progress(self, model_id, progress):
+        self.events.append(("model_progress", model_id, progress))
+
+    def prediction_failed(self, model_id, example_id, error):
+        self.events.append(("prediction_failed", model_id, example_id, error))
+
+    def model_completed(self, model_id, progress):
+        self.events.append(("model_completed", model_id, progress))
+
+    def model_failed(self, model_id, error):
+        self.events.append(("model_failed", model_id, type(error).__name__))
+
+    def report_started(self):
+        self.events.append(("report_started",))
+
+    def benchmark_completed(self, run):
+        self.events.append(("benchmark_completed", run))
+
+    def benchmark_failed(self, error):
+        self.events.append(("benchmark_failed", type(error).__name__))
 
 
 class FakeDecisionClient:
@@ -269,7 +302,16 @@ def test_one_command_runs_all_models_and_writes_analysis_ready_report(
             activity=activity,
         ),
     }
-    run = asyncio.run(run_benchmark(plan, data, tmp_path / "outputs", _clients=clients))
+    observer = RecordingObserver()
+    run = asyncio.run(
+        run_benchmark(
+            plan,
+            data,
+            tmp_path / "outputs",
+            observer=observer,
+            _clients=clients,
+        )
+    )
 
     assert activity.max_active_models == 2
     assert all(client.closed and len(client.calls) == 77 for client in clients.values())
@@ -315,6 +357,28 @@ def test_one_command_runs_all_models_and_writes_analysis_ready_report(
     assert llm_decision["answers"]["intent"] == {"type": "choice", "choice": labels[1]}
     assert llm_decision["calls"][0]["raw"] == {"response": {"label": labels[1]}}
 
+    assert observer.events[0][0] == "benchmark_started"
+    assert observer.events[0][2:] == (("jev", "llm-a", "llm-b"), 77)
+    assert {event[1] for event in observer.events if event[0] == "model_started"} == {
+        "jev",
+        "llm-a",
+        "llm-b",
+    }
+    assert (
+        "prediction_failed",
+        "llm-b",
+        "train:2",
+        "ProviderError: simulated outage",
+    ) in observer.events
+    completed = {event[1]: event[2] for event in observer.events if event[0] == "model_completed"}
+    assert completed.keys() == {"jev", "llm-a", "llm-b"}
+    assert all(
+        isinstance(progress, ModelProgress) and progress.completed == 77
+        for progress in completed.values()
+    )
+    assert ("report_started",) in observer.events
+    assert observer.events[-1] == ("benchmark_completed", run)
+
 
 def test_failed_benchmark_resumes_only_missing_examples(benchmark_dataset, tmp_path):
     data, labels = benchmark_dataset
@@ -325,8 +389,19 @@ def test_failed_benchmark_resumes_only_missing_examples(benchmark_dataset, tmp_p
         "llm-b": FakeDecisionClient(labels, model_id="llm-b"),
     }
     outputs = tmp_path / "outputs"
+    observer = RecordingObserver()
     with pytest.raises(ValueError, match="preserved record"):
-        asyncio.run(run_benchmark(plan, data, outputs, _clients=initial_clients))
+        asyncio.run(
+            run_benchmark(
+                plan,
+                data,
+                outputs,
+                observer=observer,
+                _clients=initial_clients,
+            )
+        )
+    assert ("model_failed", "llm-a", "RuntimeError") in observer.events
+    assert observer.events[-1] == ("benchmark_failed", "ValueError")
     run = next(outputs.iterdir())
     assert len(read_jsonl(run / "models" / "jev" / "predictions.jsonl")) == 77
     assert len(read_jsonl(run / "models" / "llm-a" / "predictions.jsonl")) == 2

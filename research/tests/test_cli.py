@@ -1,6 +1,8 @@
 """Command-line application behavior."""
 
 import os
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -34,3 +36,29 @@ def test_cli_loads_dotenv_without_overriding_environment(
     monkeypatch.setattr(cli, "_build_parser", verify_environment)
     with pytest.raises(EnvironmentLoaded):
         cli.main()
+
+
+def test_cli_passes_terminal_observer_to_benchmark(monkeypatch, capsys):
+    terminal_observer = object()
+
+    class FakeTerminal:
+        def __enter__(self):
+            return terminal_observer
+
+        def __exit__(self, exc_type, exc, traceback):
+            pass
+
+    async def fake_run_benchmark(plan, data, outputs, *, observer):
+        assert plan == Path("plan.toml")
+        assert data == Path("data")
+        assert outputs == Path("outputs/benchmarks")
+        assert observer is terminal_observer
+        return Path("outputs/benchmarks/run")
+
+    monkeypatch.setattr(cli, "BenchmarkTerminal", FakeTerminal)
+    monkeypatch.setattr(cli, "run_benchmark", fake_run_benchmark)
+    monkeypatch.setattr(sys, "argv", ["thesis-research", "benchmark", "--plan", "plan.toml"])
+
+    cli.main()
+
+    assert capsys.readouterr().out.strip() == "outputs/benchmarks/run"

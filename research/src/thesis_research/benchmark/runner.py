@@ -15,6 +15,7 @@ from thesis_research.benchmark.cohort import (
 )
 from thesis_research.benchmark.model_run import run_model
 from thesis_research.benchmark.plan import load_benchmark_plan
+from thesis_research.benchmark.progress import BenchmarkObserver, NullBenchmarkObserver
 from thesis_research.benchmark.report import generate_report, report_artifacts
 from thesis_research.benchmark.types import BenchmarkPlan
 from thesis_research.clients import DecisionClient
@@ -29,6 +30,7 @@ async def run_benchmark(
     data: Path,
     outputs: Path,
     *,
+    observer: BenchmarkObserver | None = None,
     _clients: dict[str, DecisionClient] | None = None,
 ) -> Path:
     """Create and execute one Jev-to-LLM benchmark.
@@ -37,6 +39,7 @@ async def run_benchmark(
     that point, every failure is recorded inside the unique benchmark
     directory so the same run can be resumed without repeating completed IDs.
     """
+    observer = observer if observer is not None else NullBenchmarkObserver()
     plan = load_benchmark_plan(plan_path)
     plan_bytes = plan_path.read_bytes()
     task_bytes = plan.task_config.read_bytes()
@@ -85,7 +88,7 @@ async def run_benchmark(
         metadata["split"] = plan.cohort.split
         metadata["split_examples"] = len(split_examples)
         metadata["cohort_examples"] = len(examples)
-        await _execute(run, plan, task, labels, examples, metadata, _clients)
+        await _execute(run, plan, task, labels, examples, metadata, observer, _clients)
     except Exception as error:
         metadata["status"] = "failed"
         metadata["error"] = f"{type(error).__name__}: {error}"
@@ -103,9 +106,11 @@ async def resume_benchmark(
     run: Path,
     data: Path,
     *,
+    observer: BenchmarkObserver | None = None,
     _clients: dict[str, DecisionClient] | None = None,
 ) -> Path:
     """Resume only the missing model predictions in a benchmark directory."""
+    observer = observer if observer is not None else NullBenchmarkObserver()
     metadata_path = run / "metadata.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     _verify_saved_inputs(run, metadata)
@@ -128,7 +133,7 @@ async def resume_benchmark(
     metadata["dataset"] = manifest
     metadata.pop("error", None)
     try:
-        await _execute(run, plan, task, labels, examples, metadata, _clients)
+        await _execute(run, plan, task, labels, examples, metadata, observer, _clients)
     except Exception as error:
         metadata["status"] = "failed"
         metadata["error"] = f"{type(error).__name__}: {error}"
@@ -149,6 +154,7 @@ async def _execute(
     labels: list[str],
     examples: list[Banking77Example],
     metadata: dict[str, Any],
+    observer: BenchmarkObserver,
     clients: dict[str, DecisionClient] | None,
 ) -> None:
     attempt = {
@@ -160,21 +166,32 @@ async def _execute(
     metadata.setdefault("attempts", []).append(attempt)
     metadata["status"] = "running"
     write_json(run / "metadata.json", metadata)
+    observer.benchmark_started(
+        plan.name,
+        run,
+        [model.id for model in plan.models],
+        len(examples),
+    )
     semaphore = asyncio.Semaphore(plan.execution.model_concurrency)
 
     async def execute_model(model_index: int) -> dict[str, Any]:
         model = plan.models[model_index]
         async with semaphore:
-            return await run_model(
-                model,
-                run / "models" / model.id,
-                examples,
-                labels,
-                task,
-                example_concurrency=plan.execution.example_concurrency,
-                llm_output_mode=plan.llm_output.mode,
-                client=clients.get(model.id) if clients is not None else None,
-            )
+            try:
+                return await run_model(
+                    model,
+                    run / "models" / model.id,
+                    examples,
+                    labels,
+                    task,
+                    example_concurrency=plan.execution.example_concurrency,
+                    llm_output_mode=plan.llm_output.mode,
+                    client=clients.get(model.id) if clients is not None else None,
+                    observer=observer,
+                )
+            except BaseException as error:
+                observer.model_failed(model.id, error)
+                raise
 
     try:
         results = await asyncio.gather(
@@ -191,17 +208,21 @@ async def _execute(
             attempt["status"] = "failed"
             attempt["model_errors"] = failures
             raise ValueError(f"Model runs failed: {failures}")
+        observer.report_started()
         generate_report(run, plan.models, examples, labels)
         metadata["report_artifacts"] = report_artifacts(run)
         metadata["status"] = "completed"
         attempt["status"] = "completed"
-    except Exception:
+        observer.benchmark_completed(run)
+    except Exception as error:
         if attempt["status"] == "running":
             attempt["status"] = "failed"
+        observer.benchmark_failed(error)
         raise
-    except BaseException:
+    except BaseException as error:
         if attempt["status"] == "running":
             attempt["status"] = "interrupted"
+        observer.benchmark_failed(error)
         raise
     finally:
         attempt["finished_at"] = datetime.now(UTC).isoformat()

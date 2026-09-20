@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from thesis_research.benchmark import resume_benchmark, run_benchmark
 from thesis_research.config import load_task_config
 from thesis_research.datasets import load_prepared_banking77, prepare_banking77
+from thesis_research.terminal import BenchmarkTerminal
 
 DEFAULT_CONFIG = Path("experiments/intent_classification/tasks/banking77.toml")
 DEFAULT_BENCHMARK_OUTPUT = Path("outputs/benchmarks")
@@ -22,11 +23,19 @@ def main() -> None:
     args = parser.parse_args()
     try:
         if args.command == "benchmark":
-            run = (
-                asyncio.run(resume_benchmark(args.resume, args.data_dir))
-                if args.resume is not None
-                else asyncio.run(run_benchmark(args.plan, args.data_dir, args.output_dir))
-            )
+            with BenchmarkTerminal() as terminal:
+                run = (
+                    asyncio.run(resume_benchmark(args.resume, args.data_dir, observer=terminal))
+                    if args.resume is not None
+                    else asyncio.run(
+                        run_benchmark(
+                            args.plan,
+                            args.data_dir,
+                            args.output_dir,
+                            observer=terminal,
+                        )
+                    )
+                )
             print(run)
             return
 

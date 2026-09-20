@@ -292,6 +292,27 @@ are preserved. Resume that same benchmark with:
 uv run thesis-research benchmark --resume RUN_DIRECTORY
 ```
 
+In an interactive terminal, the CLI keeps one progress row per model. Each row shows whether the
+model is waiting, running, done, or failed; completed examples; structurally valid and failed
+predictions; processing rate; elapsed time; and approximate ETA. Prediction failures and lifecycle
+events are printed above the live rows so they remain in terminal scrollback. Error messages are
+shortened there, while `decisions.jsonl` retains the complete diagnostics.
+
+Progress advances after each flushed example batch. With `example_concurrency = 1`, it advances
+one example at a time; with a larger value, it advances by that batch size. Models still progress
+independently and do not wait for one another between batches. If `model_concurrency` is smaller
+than the number of configured models, queued models remain visibly marked as waiting.
+
+The displayed rate measures completed examples divided by that model's elapsed run time. `valid`
+means the provider returned a structurally valid allowed label; it does not mean the prediction was
+correct. `elapsed` is the model run's wall-clock time, including client setup, response validation,
+record serialization, and cleanup. The narrower provider-call latency is recorded separately in
+`decisions.jsonl`. Accuracy and F1 are calculated only in the final report. When output is
+redirected or the terminal does not support live rendering, progress bars are disabled
+automatically and concise lifecycle and failure logs remain on standard error. Standard output
+still ends with only the run directory, making it safe to capture in a shell script. Use PyCharm's
+Terminal tool window when you want the full live display.
+
 Resume verifies that `plan.toml`, `task.toml`, and `cohort.json` have not changed. It calls only the
 models and example IDs still missing. An explicit error prediction is a completed provider attempt;
 it is evaluated as incorrect rather than silently retried during resume.
@@ -362,6 +383,8 @@ results.
 - `src/thesis_research/clients/`: shared result contracts plus Jev and Vercel AI Gateway clients.
 - `src/thesis_research/prediction.py`: bounded prediction and result serialization.
 - `src/thesis_research/benchmark/`: plans, shared cohorts, resumable model runs, and reports.
+- `src/thesis_research/benchmark/progress.py`: typed benchmark progress notifications.
+- `src/thesis_research/terminal.py`: Rich progress rows and human-readable event logs.
 - `src/thesis_research/evaluation/`: provider-independent prediction parsing and metrics.
 - `src/thesis_research/run_storage.py`: shared durable-record and Git metadata helpers.
 - `src/thesis_research/cli.py`: argument parsing and command dispatch only.
