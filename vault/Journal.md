@@ -8,6 +8,18 @@ Use authorized dated entries to retain decisions and their reasons, mentor feedb
 
 Add entries newest first when Gorazd authorizes saving them. Include the date, the agreed decision or change, its reason, and any approved follow-up actions.
 
+### 2026-09-20 — Coordinated standalone benchmark foundation
+
+Implemented the first reusable comparison pipeline for [intent classification](Use%20Cases/Intent%20Classification.md). A benchmark freezes one BANKING77 cohort and sends it to exactly one Jev configuration and one or more LLM configurations, preventing comparisons over different samples. It supports bounded model and example concurrency, interrupted-run resumption, explicit failed predictions, terminal progress, and paired machine-readable reports for later statistics and visualization. LLM output is configurable as an exact label or complete probability distribution; Jev retains its native distribution. No thesis experiment has been run. Next: choose the final models, task variant, output mode, test cohort, latency procedure, and cost source before creating the first evaluation plan.
+
+### 2026-09-19 — BANKING77 task and structured model clients
+
+Confirmed BANKING77 for the first independent use case and pinned the source revision, official training/test splits, 77-label inventory, and file checksums. Implemented a shared TypeSafe `state + questions` interface for Jev and LLMs through Vercel AI Gateway, together with task variants containing per-label criteria or null criteria. Criteria were derived from training data without copying example messages; the official test split remains reserved. Kept task TOMLs separate from benchmark TOMLs so model sets, cohorts, output modes, and execution settings can change without duplicating the task definition.
+
+### 2026-09-18 — One repository and Python research project
+
+Replaced the earlier expectation of a separate future code repository with one Git repository containing the Markdown vault and sibling `research/` Python project. Chose Python 3.12 with uv, pytest, and Ruff, with downloaded data and generated outputs ignored. This keeps documentation and code revisions aligned while preserving separate instructions for the vault and practical work.
+
 ### 2026-09-18 — First independent use case: intent classification
 
 Chose [intent classification](Use%20Cases/Intent%20Classification.md) to compare Jev and LLMs on a single defined decision before adding workflow complexity. Approved recording BANKING77 as a dataset candidate and an easy-to-hard progression as a provisional design. Standalone results come first; combined use will be investigated afterward. Next: inspect BANKING77's categories and training examples before confirming the dataset.

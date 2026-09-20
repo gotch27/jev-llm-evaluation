@@ -17,7 +17,7 @@ Direction clarified on 2026-09-18: discuss TypeSafe's published evaluations as b
 
 ### Our use cases
 
-- [Intent Classification](Use%20Cases/Intent%20Classification.md) — first independent use case, agreed on 2026-09-18. BANKING77 and the detailed experiment design remain provisional.
+- [Intent Classification](Use%20Cases/Intent%20Classification.md) — first independent use case, agreed on 2026-09-18. BANKING77 and the reusable evaluation foundation are confirmed; the final model set and thesis benchmark configuration remain open.
 
 ## TypeSafe evaluation methodology
 
@@ -33,6 +33,8 @@ Source: [TypeSafe workflow evaluations](https://evals.typesafe.ai/), accessed 20
 
 Record each of our experiments in a separate note from TypeSafe’s published evaluations, with a consistent name or identifier linking its setup, results, and interpretation. Keep TypeSafe’s published methods and results clearly attributed and separate from our own experiments and findings.
 
+Distinguish software tests and connectivity smoke checks from development experiments and frozen thesis evaluations. A working API call or smoke plan verifies infrastructure; it is not a model-quality result. Keep “no runs yet” until an agreed experiment configuration is intentionally executed and recorded as such.
+
 For each experiment, record:
 
 - **Question:** what we want to learn.
@@ -44,4 +46,4 @@ For each experiment, record:
 
 ## Findings across experiments
 
-Once results exist, link cross-case comparisons and potential thesis figures or tables here. Keep detailed results and interpretation in the individual use-case notes.
+No measured thesis results exist yet. Once results exist, link cross-case comparisons and potential thesis figures or tables here. Keep detailed results and interpretation in the individual use-case notes.

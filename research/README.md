@@ -5,6 +5,9 @@ structured interface for calling Jev and LLMs through Vercel AI Gateway, and run
 benchmarks in which every configured model receives the same frozen cohort. Benchmark reports
 are saved as machine-readable tables for later statistical analysis and visualization.
 
+See [Experiment configuration reference](CONFIGURATION.md) for complete task and benchmark TOML
+examples, supported fields, allowed values, and validation rules.
+
 ## Setup
 
 Use Python 3.12 and [uv](https://docs.astral.sh/uv/). Run all commands below from `research/`:
@@ -31,7 +34,7 @@ dependency versions.
 Both clients accept the same state and TypeSafe `Choice`, `Score`, and `Noul` questions and
 return a `DecisionResult`. Jev receives the complete question set in one request. An LLM receives
 one isolated request per question; those requests run concurrently with at most five active by
-default. For BANKING77 there will be one Choice question with 77 options, so this distinction does
+default. BANKING77 has one Choice question with 77 options, so this distinction does
 not create extra requests.
 
 Both paths use `AI_GATEWAY_API_KEY`. Jev uses Vercel's TypeSafe-compatible endpoint while keeping
@@ -265,10 +268,11 @@ selects every intent before adding a second example from any intent. A seed make
 repeatable. Use `strategy = "all"` without `size` or `seed` when the complete configured split
 should be evaluated.
 
-`llm_output.mode = "label"` makes every LLM return only the selected label. This is the default
-choice for the accuracy and F1 benchmark because no probability is needed for those metrics. Set
-it to `"probabilities"` when an experiment needs the complete LLM distribution. The setting does
-not change Jev's native output, and label mode does not produce a confidence value.
+`llm_output.mode = "label"` makes every LLM return only the selected label. The current smoke
+plans choose this mode because accuracy and F1 do not require a probability. Set it to
+`"probabilities"` when an experiment needs the complete LLM distribution. The field is required;
+the software does not choose a mode implicitly. The setting does not change Jev's native output,
+and label mode does not produce a confidence value.
 
 `example_concurrency` bounds active examples inside each model run. `model_concurrency` bounds how
 many models run at the same time. The smoke plan uses `6`, so Jev and all five LLMs are called
