@@ -1,3 +1,5 @@
+# Training-only check of timing records; ten rows do not estimate tail latency reliably.
+# Models and examples run sequentially, with no extra warm-up calls.
 name = "BANKING77 timing pilot"
 task_config = "../tasks/banking77.toml"
 
@@ -8,7 +10,7 @@ size = 10
 seed = 20260920
 
 [llm_output]
-mode = "label"
+mode = "discrete"
 
 [execution]
 example_concurrency = 1

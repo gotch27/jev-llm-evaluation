@@ -9,6 +9,7 @@ from system_one_adapter.providers.openai import AsyncOpenAIProvider
 from typesafe_sdk import TypeSafeError
 
 from thesis_research.clients.contracts import DEFAULT_TIMEOUT_SECONDS
+from thesis_research.clients.gateway_metadata import reported_cost, resolved_provider
 
 VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1"
 REASONING_EFFORTS = frozenset({"none", "minimal", "low", "medium", "high", "xhigh"})
@@ -29,7 +30,7 @@ class VercelGatewayProviderResult(ProviderResult):
     request: dict[str, Any]
     raw_response: dict[str, Any]
     resolved_model: str
-    resolved_provider: str
+    resolved_provider: str | None
     cost_usd: float | None
 
 
@@ -130,49 +131,6 @@ class VercelGatewayProvider(AsyncOpenAIProvider):
             request=request,
             raw_response=raw,
             resolved_model=str(raw.get("model") or self.model_name),
-            resolved_provider=_resolved_provider(raw, self.provider_name),
-            cost_usd=_cost(raw),
+            resolved_provider=resolved_provider(raw),
+            cost_usd=reported_cost(raw),
         )
-
-
-def _resolved_provider(raw: dict[str, Any], requested_provider: str) -> str:
-    direct = raw.get("provider")
-    if isinstance(direct, str) and direct:
-        return direct
-    gateway = _gateway_metadata(raw)
-    routing = gateway.get("routing")
-    if isinstance(routing, dict):
-        for key in ("resolvedProvider", "resolved_provider"):
-            value = routing.get(key)
-            if isinstance(value, str) and value:
-                return value
-    return requested_provider
-
-
-def _cost(raw: dict[str, Any]) -> float | None:
-    usage = raw.get("usage")
-    if isinstance(usage, dict):
-        parsed = _numeric_value(usage.get("cost"))
-        if parsed is not None:
-            return parsed
-    parsed = _numeric_value(_gateway_metadata(raw).get("cost"))
-    if parsed is not None:
-        return parsed
-    return None
-
-
-def _numeric_value(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        return None
-    try:
-        return float(value)
-    except ValueError:
-        return None
-
-
-def _gateway_metadata(raw: dict[str, Any]) -> dict[str, Any]:
-    metadata = raw.get("provider_metadata", raw.get("providerMetadata"))
-    if not isinstance(metadata, dict):
-        return {}
-    gateway = metadata.get("gateway")
-    return gateway if isinstance(gateway, dict) else {}

@@ -1,24 +1,29 @@
-"""Select and preserve one BANKING77 cohort shared by every model."""
+"""Select and preserve one labeled cohort shared by every model."""
 
 import random
 from collections import defaultdict
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from thesis_research.benchmark.types import CohortSpec
-from thesis_research.datasets import Banking77Example
+from thesis_research.datasets import (
+    ChoiceReference,
+    DatasetExample,
+    NoulReference,
+    Reference,
+    ReferenceSchema,
+    ScoreReference,
+    reference_class,
+)
+from thesis_research.tasks import StructuredTask, class_labels
 
 
-def select_banking77_cohort(
-    examples: Sequence[Banking77Example],
-    labels: Sequence[str],
+def select_cohort(
+    examples: Sequence[DatasetExample],
+    schema: ReferenceSchema,
     spec: CohortSpec,
-) -> list[Banking77Example]:
-    """Select all examples or a deterministic label-stratified subset.
-
-    A stratified cohort first selects one example from every label, then
-    continues round-robin across labels. The returned examples follow their
-    original dataset order so every model receives the same stable sequence.
-    """
+) -> list[DatasetExample]:
+    """Select all rows or a deterministic random/stratified subset."""
     if spec.strategy == "all":
         return list(examples)
     if spec.size is None or spec.seed is None:
@@ -28,27 +33,28 @@ def select_banking77_cohort(
 
     generator = random.Random(spec.seed)
     if spec.strategy == "random":
-        chosen_ids = {example.id for example in generator.sample(list(examples), spec.size)}
-        return [example for example in examples if example.id in chosen_ids]
-    if spec.size < len(labels):
-        raise ValueError(f"Stratified cohort size must be at least {len(labels)}")
+        selected_ids = {example.id for example in generator.sample(list(examples), spec.size)}
+        return [example for example in examples if example.id in selected_ids]
 
-    buckets: dict[str, list[Banking77Example]] = defaultdict(list)
+    strata = class_labels(schema)
+    if spec.size < len(strata):
+        raise ValueError(f"Stratified cohort size must be at least {len(strata)}")
+    buckets: dict[str, list[DatasetExample]] = defaultdict(list)
     for example in examples:
-        buckets[example.label].append(example)
-    missing = [label for label in labels if not buckets[label]]
+        buckets[reference_class(example.reference)].append(example)
+    missing = [stratum for stratum in strata if not buckets[stratum]]
     if missing:
-        raise ValueError(f"Dataset split has no examples for labels: {missing[:5]}")
+        raise ValueError(f"Dataset split has no examples for strata: {missing[:5]}")
+    for stratum in strata:
+        generator.shuffle(buckets[stratum])
 
-    for label in labels:
-        generator.shuffle(buckets[label])
-    selected: list[Banking77Example] = []
+    selected: list[DatasetExample] = []
     depth = 0
     while len(selected) < spec.size:
         added = False
-        for label in labels:
-            if depth < len(buckets[label]):
-                selected.append(buckets[label][depth])
+        for stratum in strata:
+            if depth < len(buckets[stratum]):
+                selected.append(buckets[stratum][depth])
                 added = True
                 if len(selected) == spec.size:
                     break
@@ -60,20 +66,29 @@ def select_banking77_cohort(
 
 
 def cohort_record(
-    examples: Sequence[Banking77Example],
+    examples: Sequence[DatasetExample],
     *,
+    dataset_id: str,
     dataset_revision: str,
     split: str,
+    schema: ReferenceSchema,
     spec: CohortSpec,
+    task: StructuredTask,
 ) -> dict[str, Any]:
-    """Serialize a frozen cohort with references and original messages."""
+    """Serialize the exact states and references of one frozen cohort."""
     return {
+        "dataset_id": dataset_id,
         "dataset_revision": dataset_revision,
         "split": split,
+        "question_type": schema.question_type,
         "selection": spec.as_dict(),
         "count": len(examples),
         "examples": [
-            {"id": example.id, "text": example.text, "reference_label": example.label}
+            {
+                "id": example.id,
+                "state": task.build_state(example.state),
+                "reference": _reference_record(example.reference),
+            }
             for example in examples
         ],
     }
@@ -81,21 +96,28 @@ def cohort_record(
 
 def examples_from_cohort(
     value: object,
-    dataset_examples: Sequence[Banking77Example],
+    dataset_examples: Sequence[DatasetExample],
     *,
+    dataset_id: str,
     dataset_revision: str,
     split: str,
-) -> list[Banking77Example]:
-    """Validate a saved cohort against the pinned prepared dataset."""
+    task: StructuredTask,
+) -> list[DatasetExample]:
+    """Validate frozen model states and typed references against prepared data."""
     if not isinstance(value, dict):
         raise ValueError("Saved cohort must be a JSON object")
     if value.get("dataset_revision") != dataset_revision or value.get("split") != split:
         raise ValueError("Saved cohort does not match the benchmark dataset")
+    if value.get("dataset_id") != dataset_id:
+        raise ValueError("Saved cohort dataset ID does not match the benchmark dataset")
+    if value.get("question_type") != task.question_type:
+        raise ValueError("Saved cohort question type does not match the task")
     records = value.get("examples")
     if not isinstance(records, list) or value.get("count") != len(records) or not records:
         raise ValueError("Saved cohort has an invalid example list")
+
     by_id = {example.id: example for example in dataset_examples}
-    selected: list[Banking77Example] = []
+    selected: list[DatasetExample] = []
     seen: set[str] = set()
     for record in records:
         if not isinstance(record, dict) or not isinstance(record.get("id"), str):
@@ -104,8 +126,19 @@ def examples_from_cohort(
         if example_id in seen or example_id not in by_id:
             raise ValueError(f"Saved cohort contains an invalid ID: {example_id}")
         example = by_id[example_id]
-        if record.get("text") != example.text or record.get("reference_label") != example.label:
-            raise ValueError(f"Saved cohort differs from the dataset for ID: {example_id}")
+        if record.get("state") != task.build_state(example.state):
+            raise ValueError(f"Saved cohort state differs for ID: {example_id}")
+        if record.get("reference") != _reference_record(example.reference):
+            raise ValueError(f"Saved cohort reference differs for ID: {example_id}")
         seen.add(example_id)
         selected.append(example)
     return selected
+
+
+def _reference_record(reference: Reference) -> dict[str, Any]:
+    if isinstance(reference, ChoiceReference):
+        return {"type": "choice", "label": reference.label}
+    if isinstance(reference, NoulReference):
+        return {"type": "noul", "value": reference.value}
+    assert isinstance(reference, ScoreReference)
+    return {"type": "score", "level": reference.level}

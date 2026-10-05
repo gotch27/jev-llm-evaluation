@@ -5,7 +5,8 @@ import pytest
 from typesafe_sdk import Choice
 
 from thesis_research.config import load_task_config
-from thesis_research.tasks import build_banking77_task
+from thesis_research.datasets import ChoiceReferenceSchema
+from thesis_research.tasks import build_structured_task
 
 CONFIG_PATH = (
     Path(__file__).parents[1] / "experiments" / "intent_classification" / "tasks" / "banking77.toml"
@@ -100,6 +101,9 @@ LABELS = [
 ]
 
 
+SCHEMA = ChoiceReferenceSchema(tuple(LABELS))
+
+
 def config():
     return load_task_config(CONFIG_PATH)
 
@@ -110,25 +114,27 @@ def with_options(base, options):
 
 
 def test_builds_frozen_choice_and_state_from_official_inventory():
-    task = build_banking77_task(config(), LABELS)
+    task = build_structured_task(config(), SCHEMA)
 
-    assert task.state_field == "customer_message"
+    assert task.state_fields == (("customer_message", "text"),)
     assert task.question_id == "intent"
-    assert task.build_state("Where is my card?") == {"customer_message": "Where is my card?"}
-    assert isinstance(task.choice, Choice)
-    assert task.choice.instructions == INSTRUCTIONS
-    assert list(task.choice.criteria) == LABELS
-    assert task.questions() == {"intent": task.choice}
+    assert task.build_state({"text": "Where is my card?"}) == {
+        "customer_message": "Where is my card?"
+    }
+    assert isinstance(task.question, Choice)
+    assert task.question.instructions == INSTRUCTIONS
+    assert list(task.question.criteria) == LABELS
+    assert task.questions() == {"intent": task.question}
 
-    for criterion in task.choice.criteria.values():
+    for criterion in task.question.criteria.values():
         assert isinstance(criterion, dict)
         assert set(criterion) == {"use_when", "distinguish_from"}
         assert all(isinstance(value, str) and value.strip() for value in criterion.values())
 
-    assert "Refund_not_showing_up" in task.choice.criteria
-    assert "reverted_card_payment?" in task.choice.criteria
-    assert "PIN" in task.choice.criteria["get_physical_card"]["use_when"]
-    assert "order_physical_card" in task.choice.criteria["get_physical_card"]["distinguish_from"]
+    assert "Refund_not_showing_up" in task.question.criteria
+    assert "reverted_card_payment?" in task.question.criteria
+    assert "PIN" in task.question.criteria["get_physical_card"]["use_when"]
+    assert "order_physical_card" in task.question.criteria["get_physical_card"]["distinguish_from"]
 
 
 def test_passes_generic_criterion_shapes_to_typesafe_choice():
@@ -139,19 +145,19 @@ def test_passes_generic_criterion_shapes_to_typesafe_choice():
     options[1] = replace(options[1], criterion=["first boundary", {"priority": 2}])
     options[2] = replace(options[2], criterion=None)
 
-    task = build_banking77_task(with_options(base, options), LABELS)
+    task = build_structured_task(with_options(base, options), SCHEMA)
 
-    assert task.choice.criteria[LABELS[0]] == "A string criterion"
-    assert task.choice.criteria[LABELS[1]] == ["first boundary", {"priority": 2}]
-    assert task.choice.criteria[LABELS[2]] is None
+    assert task.question.criteria[LABELS[0]] == "A string criterion"
+    assert task.question.criteria[LABELS[1]] == ["first boundary", {"priority": 2}]
+    assert task.question.criteria[LABELS[2]] is None
 
 
 def test_builds_without_criteria_variant_with_null_criteria():
-    task = build_banking77_task(load_task_config(WITHOUT_CRITERIA_CONFIG_PATH), LABELS)
+    task = build_structured_task(load_task_config(WITHOUT_CRITERIA_CONFIG_PATH), SCHEMA)
 
-    assert task.choice.instructions == INSTRUCTIONS
-    assert list(task.choice.criteria) == LABELS
-    assert all(criterion is None for criterion in task.choice.criteria.values())
+    assert task.question.instructions == INSTRUCTIONS
+    assert list(task.question.criteria) == LABELS
+    assert all(criterion is None for criterion in task.question.criteria.values())
 
 
 def test_rejects_missing_duplicate_unexpected_and_reordered_labels():
@@ -159,38 +165,37 @@ def test_rejects_missing_duplicate_unexpected_and_reordered_labels():
     assert base.question is not None
     missing = with_options(base, base.question.options[:-1])
     with pytest.raises(ValueError, match="missing=.*country_support"):
-        build_banking77_task(missing, LABELS)
+        build_structured_task(missing, SCHEMA)
 
     duplicate_options = list(base.question.options)
     duplicate_options[-1] = replace(duplicate_options[-1], label=LABELS[0])
     with pytest.raises(ValueError, match="Duplicate.*card_arrival"):
-        build_banking77_task(with_options(base, duplicate_options), LABELS)
+        build_structured_task(with_options(base, duplicate_options), SCHEMA)
 
     unexpected_options = list(base.question.options)
     unexpected_options[-1] = replace(unexpected_options[-1], label="other")
     with pytest.raises(ValueError, match="unexpected=.*other"):
-        build_banking77_task(with_options(base, unexpected_options), LABELS)
+        build_structured_task(with_options(base, unexpected_options), SCHEMA)
 
     reordered_options = list(base.question.options)
     reordered_options[0:2] = reversed(reordered_options[0:2])
     with pytest.raises(ValueError, match="label order"):
-        build_banking77_task(with_options(base, reordered_options), LABELS)
+        build_structured_task(with_options(base, reordered_options), SCHEMA)
 
 
-def test_rejects_invalid_state_question_and_expected_inventory():
+def test_state_names_and_question_ids_are_configurable():
     base = config()
-    assert base.question is not None
-    task = build_banking77_task(base, LABELS)
+    renamed = replace(
+        base,
+        state=replace(base.state, fields=(("message", "text"),)),
+        question=replace(base.question, question_id="category"),
+    )
+    task = build_structured_task(renamed, SCHEMA)
+    assert task.build_state({"text": "Where is my card?"}) == {"message": "Where is my card?"}
+    assert task.questions() == {"category": task.question}
     with pytest.raises(ValueError, match="nonempty"):
-        task.build_state("")
-
-    invalid_state = replace(base, question=replace(base.question, state_field="message"))
-    with pytest.raises(ValueError, match="customer_message"):
-        build_banking77_task(invalid_state, LABELS)
-
-    invalid_question = replace(base, question=replace(base.question, question_id="category"))
-    with pytest.raises(ValueError, match="intent"):
-        build_banking77_task(invalid_question, LABELS)
-
-    with pytest.raises(ValueError, match="77 unique"):
-        build_banking77_task(base, [*LABELS[:-1], LABELS[0]])
+        task.build_state({"text": ""})
+    with pytest.raises(ValueError, match="missing source field: text"):
+        task.build_state({"message": "Where is my card?"})
+    with pytest.raises(ValueError, match="must be a mapping"):
+        task.build_state("Where is my card?")

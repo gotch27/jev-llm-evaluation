@@ -5,7 +5,9 @@ description = "Experiments comparing Jev and large language models"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "httpx2>=2.13,<3",
     "openai>=3.16,<4",
+    "pyarrow>=25,<26",
     "python-dotenv>=1.1,<2",
     "rich>=14,<15",
     "system-one-adapter[openai]>=0.2,<0.3",

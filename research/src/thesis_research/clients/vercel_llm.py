@@ -16,6 +16,7 @@ from thesis_research.clients.contracts import (
     DEFAULT_MAX_CONCURRENCY,
     DEFAULT_TIMEOUT_SECONDS,
     CallRecord,
+    DecisionClient,
     DecisionError,
     DecisionResult,
     UsageTotals,
@@ -34,7 +35,7 @@ class _QuestionEvaluation:
     answer: Answer | None
 
 
-class VercelLLMDecisionClient:
+class VercelLLMDecisionClient(DecisionClient):
     """Evaluate questions through isolated, concurrent Vercel AI Gateway requests.
 
     TypeSafe's adapter creates and validates the JSON schema for each question.
@@ -44,7 +45,7 @@ class VercelLLMDecisionClient:
     Args:
         model: Canonical Vercel model identifier, excluding routing aliases.
         provider: Upstream provider slug that must serve every request.
-        output_mode: Return one label or a complete probability distribution.
+        output_mode: Return discrete answers or question-specific probabilities.
         reasoning_effort: Explicit provider reasoning effort, or ``None`` to
             leave the setting unspecified.
         max_concurrency: Maximum active provider requests for this client.
@@ -61,7 +62,7 @@ class VercelLLMDecisionClient:
         model: str,
         provider: str,
         *,
-        output_mode: Literal["label", "probabilities"] = "probabilities",
+        output_mode: Literal["discrete", "probabilities"] = "probabilities",
         reasoning_effort: str | None = None,
         max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
@@ -71,8 +72,8 @@ class VercelLLMDecisionClient:
         _validate_exact_model(model)
         if not provider.strip():
             raise ValueError("provider must be nonempty")
-        if output_mode not in ("label", "probabilities"):
-            raise ValueError("output_mode must be label or probabilities")
+        if output_mode not in ("discrete", "probabilities"):
+            raise ValueError("output_mode must be discrete or probabilities")
         if reasoning_effort is not None and reasoning_effort not in REASONING_EFFORTS:
             raise ValueError(f"Unsupported reasoning effort: {reasoning_effort}")
         if max_concurrency < 1:
@@ -98,7 +99,7 @@ class VercelLLMDecisionClient:
         self._retry = retry or RetryPolicy()
         self._adapter = AsyncSystemOneAdapterClient(
             structured_outputs=True,
-            llm_answer_mode="discrete" if output_mode == "label" else "probabilities",
+            llm_answer_mode=output_mode,
             normalize_probabilities=output_mode == "probabilities",
             n_retry_malformed_structure=0,
             retry=self._retry,
@@ -162,15 +163,16 @@ class VercelLLMDecisionClient:
         question_id: str,
         question: Any,
     ) -> _QuestionEvaluation:
-        started = time.perf_counter()
         try:
             async with self._semaphore:
+                started = time.perf_counter()
                 response = await self._adapter.system_one(
                     state,
                     {question_id: question},
                     model=self._provider,
                     retry=self._retry,
                 )
+                call_latency = time.perf_counter() - started
         except (TypeSafeError, ValueError) as error:
             decision_error = _decision_error(error)
             return _QuestionEvaluation(
@@ -195,8 +197,8 @@ class VercelLLMDecisionClient:
                 requested_model=self.requested_model,
                 resolved_model=provider_result.get("resolved_model", response.model),
                 requested_provider=self.requested_provider,
-                resolved_provider=provider_result.get("resolved_provider", self.requested_provider),
-                latency_seconds=time.perf_counter() - started,
+                resolved_provider=provider_result.get("resolved_provider"),
+                latency_seconds=call_latency,
                 usage=UsageTotals(
                     input_tokens=response.usage.input_tokens_total,
                     output_tokens=response.usage.output_tokens_total,

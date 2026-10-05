@@ -1,19 +1,27 @@
-"""Run a structured intent task over dataset examples and stream durable records."""
+"""Run one structured task over labeled examples and stream durable records."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import math
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any, TextIO
 
-from typesafe_sdk import ChoiceAnswer
+from typesafe_sdk import ChoiceAnswer, NoulAnswer, ScoreAnswer
 
 from thesis_research.clients import DecisionClient, DecisionError, DecisionResult, UsageTotals
-from thesis_research.datasets import Banking77Example
-from thesis_research.tasks import IntentClassificationTask
+from thesis_research.datasets import (
+    ChoiceReferenceSchema,
+    DatasetExample,
+    NoulReferenceSchema,
+    ReferenceSchema,
+    ScoreReferenceSchema,
+)
+from thesis_research.evaluation import prediction_status
+from thesis_research.tasks import StructuredTask
 
 _USAGE_FIELDS = (
     "input_tokens",
@@ -43,12 +51,9 @@ class _PredictionSummary:
     )
 
     def add(self, result: DecisionResult, successful: bool) -> None:
-        """Add one decision result without overstating incomplete usage."""
         self.attempted += 1
-        if successful:
-            self.successful += 1
-        else:
-            self.failed += 1
+        self.successful += int(successful)
+        self.failed += int(not successful)
         _extend_unique(self.resolved_models, result.resolved_models)
         _extend_unique(self.resolved_providers, result.resolved_providers)
         for name in _USAGE_FIELDS:
@@ -59,7 +64,6 @@ class _PredictionSummary:
                 self._usage_values[name] += value
 
     def as_dict(self) -> dict[str, Any]:
-        """Return the current progress as a JSON-safe metadata object."""
         return {
             "expected": self.expected,
             "attempted": self.attempted,
@@ -77,68 +81,44 @@ class _PredictionSummary:
 
 async def predict_examples(
     client: DecisionClient,
-    examples: Sequence[Banking77Example],
-    task: IntentClassificationTask,
-    labels: Sequence[str],
+    examples: Sequence[DatasetExample],
+    task: StructuredTask,
+    schema: ReferenceSchema,
     predictions_file: TextIO,
     decisions_file: TextIO,
     *,
     max_concurrency: int,
-    record_choice_details: bool = True,
+    record_answer_details: bool = True,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
     on_prediction: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    """Evaluate examples in bounded batches and stream ordered JSONL records.
-
-    Each completed batch is flushed before the next begins. This preserves
-    partial progress if a later batch is interrupted. Provider-level failures
-    become explicit error predictions rather than stopping the dataset run.
-
-    Args:
-        client: Open asynchronous client used for structured decisions.
-        examples: Dataset examples in the order they should be written.
-        task: Validated state builder and Choice question.
-        labels: Complete set of allowed prediction labels.
-        predictions_file: Writable stream receiving evaluator-ready records.
-        decisions_file: Writable stream receiving full diagnostic records.
-        max_concurrency: Maximum examples evaluated in one active batch.
-        record_choice_details: Preserve Choice confidence and probabilities.
-            Set to false for label-only LLM output so adapter-derived one-hot
-            values are not presented as measured model confidence.
-        on_progress: Optional callback invoked after each flushed batch.
-        on_prediction: Optional callback invoked for each completed prediction.
-
-    Returns:
-        JSON-safe counts, elapsed time, routing, and aggregate usage.
-
-    Raises:
-        ValueError: If ``max_concurrency`` is less than one.
-        asyncio.CancelledError: If the caller cancels prediction generation.
-    """
+    """Validate states, evaluate bounded batches, and stream ordered records."""
     if max_concurrency < 1:
         raise ValueError("max_concurrency must be at least 1")
-    allowed_labels = set(labels)
+    task.validate_state_fields(examples)
     summary = _PredictionSummary(expected=len(examples))
     started = time.perf_counter()
 
     for offset in range(0, len(examples), max_concurrency):
         batch = examples[offset : offset + max_concurrency]
-        states = [task.build_state(example.text) for example in batch]
-        tasks = [asyncio.create_task(client.evaluate(state, task.questions())) for state in states]
+        states = [task.build_state(example.state) for example in batch]
+        pending = [
+            asyncio.create_task(client.evaluate(state, task.questions())) for state in states
+        ]
         try:
-            results = await asyncio.gather(*tasks)
+            results = await asyncio.gather(*pending)
         except BaseException:
-            for pending in tasks:
-                pending.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            for request in pending:
+                request.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
             raise
         for example, state, result in zip(batch, states, results, strict=True):
             prediction, successful = _prediction_record(
                 example.id,
                 result,
                 task.question_id,
-                allowed_labels,
-                record_choice_details=record_choice_details,
+                schema,
+                record_answer_details=record_answer_details,
             )
             _write_json_line(predictions_file, prediction)
             _write_json_line(
@@ -149,7 +129,7 @@ async def predict_examples(
                     "prediction": prediction,
                     "decision": decision_result_to_dict(
                         result,
-                        record_choice_details=record_choice_details,
+                        record_answer_details=record_answer_details,
                     ),
                 },
             )
@@ -169,26 +149,16 @@ async def predict_examples(
 def decision_result_to_dict(
     result: DecisionResult,
     *,
-    record_choice_details: bool = True,
+    record_answer_details: bool = True,
 ) -> dict[str, Any]:
-    """Convert a provider-neutral decision result into a JSON-safe record.
-
-    Typed TypeSafe answers are serialized while raw provider diagnostics are
-    retained for later inspection and reproducibility analysis.
-
-    Args:
-        result: Decision result returned by the Jev or Vercel LLM client.
-        record_choice_details: Preserve Choice confidence and probabilities.
-
-    Returns:
-        Dictionary suitable for one ``decisions.jsonl`` record.
-    """
+    """Convert a provider-neutral decision result into a JSON-safe record."""
+    mode = "probabilities" if record_answer_details else "discrete"
     return {
         "answers": {
-            question_id: _answer_to_dict(answer, record_choice_details)
+            question_id: _answer_to_dict(answer, record_answer_details)
             for question_id, answer in result.answers.items()
         },
-        "choice_output_mode": "probabilities" if record_choice_details else "label",
+        "answer_output_mode": mode,
         "errors": {
             question_id: _error_to_dict(error) for question_id, error in result.errors.items()
         },
@@ -219,9 +189,9 @@ def _prediction_record(
     example_id: str,
     result: DecisionResult,
     question_id: str,
-    allowed_labels: set[str],
+    schema: ReferenceSchema,
     *,
-    record_choice_details: bool,
+    record_answer_details: bool,
 ) -> tuple[dict[str, Any], bool]:
     answer = result.answers.get(question_id)
     error = result.errors.get(question_id)
@@ -229,23 +199,118 @@ def _prediction_record(
         return {"id": example_id, "error": "Decision returned both an answer and an error"}, False
     if error is not None:
         return {"id": example_id, "error": _prediction_error(error)}, False
+    if isinstance(schema, ChoiceReferenceSchema):
+        prediction, successful = _choice_prediction(
+            example_id, answer, schema, record_answer_details
+        )
+    elif isinstance(schema, NoulReferenceSchema):
+        prediction, successful = _noul_prediction(example_id, answer, record_answer_details)
+    else:
+        prediction, successful = _score_prediction(
+            example_id, answer, schema, record_answer_details
+        )
+    if successful and prediction_status(prediction, schema)[0] != "valid":
+        return {
+            "id": example_id,
+            "error": f"Decision returned invalid {schema.question_type} answer details",
+        }, False
+    return prediction, successful
+
+
+def _choice_prediction(
+    example_id: str,
+    answer: object,
+    schema: ChoiceReferenceSchema,
+    details: bool,
+) -> tuple[dict[str, Any], bool]:
     if not isinstance(answer, ChoiceAnswer):
         return {"id": example_id, "error": "Decision did not return a Choice answer"}, False
-    if answer.choice not in allowed_labels:
+    if answer.choice not in schema.labels:
         return {
             "id": example_id,
             "error": f"Decision returned an unknown label: {answer.choice}",
         }, False
     prediction: dict[str, Any] = {"id": example_id, "label": answer.choice}
-    if record_choice_details:
+    if details:
         prediction["confidence"] = answer.confidence
         prediction["probabilities"] = dict(answer.probabilities)
     return prediction, True
 
 
-def _answer_to_dict(answer: object, record_choice_details: bool) -> object:
-    if isinstance(answer, ChoiceAnswer) and not record_choice_details:
-        return {"type": "choice", "choice": answer.choice}
+def _noul_prediction(example_id: str, answer: object, details: bool) -> tuple[dict[str, Any], bool]:
+    if not isinstance(answer, NoulAnswer):
+        return {"id": example_id, "error": "Decision did not return a Noul answer"}, False
+    probability = answer.noul
+    if (
+        not isinstance(probability, int | float)
+        or isinstance(probability, bool)
+        or not math.isfinite(probability)
+    ):
+        return {"id": example_id, "error": "Decision returned an invalid Noul probability"}, False
+    probability = float(probability)
+    if not 0 <= probability <= 1:
+        return {"id": example_id, "error": "Decision returned an invalid Noul probability"}, False
+    prediction: dict[str, Any] = {"id": example_id, "value": probability >= 0.5}
+    if details:
+        prediction["probability"] = probability
+    return prediction, True
+
+
+def _score_prediction(
+    example_id: str,
+    answer: object,
+    schema: ScoreReferenceSchema,
+    details: bool,
+) -> tuple[dict[str, Any], bool]:
+    if not isinstance(answer, ScoreAnswer):
+        return {"id": example_id, "error": "Decision did not return a Score answer"}, False
+    score = answer.score
+    if (
+        not isinstance(score, int | float)
+        or isinstance(score, bool)
+        or not math.isfinite(score)
+        or not 0 <= score <= schema.level_count - 1
+    ):
+        return {"id": example_id, "error": "Decision returned an invalid Score value"}, False
+    probabilities = dict(answer.probabilities)
+    expected_levels = set(range(schema.level_count))
+    if (
+        set(probabilities) != expected_levels
+        or any(type(level) is not int for level in probabilities)
+        or any(
+            not isinstance(value, int | float)
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+            or value < 0
+            or value > 1
+            for value in probabilities.values()
+        )
+        or not math.isclose(sum(probabilities.values()), 1.0, rel_tol=1e-6, abs_tol=1e-6)
+    ):
+        return {"id": example_id, "error": "Decision returned invalid Score probabilities"}, False
+    highest = max(probabilities.values())
+    level = min(level for level, probability in probabilities.items() if probability == highest)
+    prediction: dict[str, Any] = {
+        "id": example_id,
+        "level": level,
+        "score": float(score),
+    }
+    if details:
+        prediction["confidence"] = answer.confidence
+        prediction["probabilities"] = {
+            str(level): probability for level, probability in probabilities.items()
+        }
+    return prediction, True
+
+
+def _answer_to_dict(answer: object, details: bool) -> object:
+    if not details:
+        if isinstance(answer, ChoiceAnswer):
+            return {"type": "choice", "choice": answer.choice}
+        if isinstance(answer, NoulAnswer):
+            return {"type": "noul", "value": answer.noul >= 0.5}
+        if isinstance(answer, ScoreAnswer):
+            return {"type": "score", "score": answer.score}
     model_dump = getattr(answer, "model_dump", None)
     return model_dump(mode="json") if callable(model_dump) else answer
 

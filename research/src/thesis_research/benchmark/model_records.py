@@ -6,11 +6,12 @@ import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from thesis_research.benchmark.timing import latency_statistics
 from thesis_research.benchmark.types import ModelSpec
-from thesis_research.evaluation import read_prediction_jsonl
+from thesis_research.datasets import ReferenceSchema
+from thesis_research.evaluation import prediction_status, read_prediction_jsonl
 from thesis_research.run_storage import artifact_metadata, write_json
 
 USAGE_FIELDS = (
@@ -31,12 +32,7 @@ def load_or_create_model_metadata(
     """Load compatible model metadata or initialize it for a new run."""
     if path.exists():
         metadata = json.loads(path.read_text(encoding="utf-8"))
-        if metadata.get("model") != spec.as_dict():
-            raise ValueError(f"Saved model metadata does not match plan for {spec.id}")
-        if metadata.get("example_concurrency") != example_concurrency:
-            raise ValueError(f"Saved concurrency does not match plan for {spec.id}")
-        if metadata.get("output_mode") != output_mode:
-            raise ValueError(f"Saved output mode does not match plan for {spec.id}")
+        validate_model_metadata(metadata, spec, example_concurrency, output_mode)
         return metadata
     metadata = {
         "model": spec.as_dict(),
@@ -49,6 +45,21 @@ def load_or_create_model_metadata(
     }
     write_json(path, metadata)
     return metadata
+
+
+def validate_model_metadata(
+    metadata: dict[str, Any],
+    spec: ModelSpec,
+    example_concurrency: int,
+    output_mode: str,
+) -> None:
+    """Check saved model settings without rewriting or creating any artifacts."""
+    if not isinstance(metadata, dict) or metadata.get("model") != spec.as_dict():
+        raise ValueError(f"Saved model metadata does not match plan for {spec.id}")
+    if metadata.get("example_concurrency") != example_concurrency:
+        raise ValueError(f"Saved concurrency does not match plan for {spec.id}")
+    if metadata.get("output_mode") != output_mode:
+        raise ValueError(f"Saved output mode does not match plan for {spec.id}")
 
 
 def load_model_records(directory: Path) -> tuple[dict[str, dict], dict[str, dict]]:
@@ -97,6 +108,7 @@ def archive_error_records_for_retry(directory: Path) -> tuple[str, ...]:
     failed prediction and decision records are retained in ``retry_history.jsonl``.
     """
     predictions, decisions = load_model_records(directory)
+    validate_model_records(predictions, decisions, set(predictions))
     failed_ids = tuple(
         example_id
         for example_id, prediction in predictions.items()
@@ -105,6 +117,8 @@ def archive_error_records_for_retry(directory: Path) -> tuple[str, ...]:
     if not failed_ids:
         return ()
 
+    metadata_path = directory / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     archived_at = datetime.now(UTC).isoformat()
     history_path = directory / "retry_history.jsonl"
     history = history_path.read_text(encoding="utf-8") if history_path.exists() else ""
@@ -132,8 +146,6 @@ def archive_error_records_for_retry(directory: Path) -> tuple[str, ...]:
         directory / "decisions.jsonl",
         (record for example_id, record in decisions.items() if example_id not in failed),
     )
-    metadata_path = directory / "metadata.json"
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     metadata.setdefault("error_retries", []).append(
         {
             "prepared_at": archived_at,
@@ -161,13 +173,16 @@ def _replace_text(path: Path, content: str) -> None:
 def summarize_model_records(
     directory: Path,
     expected: int,
-    labels: Sequence[str],
+    schema: ReferenceSchema,
     metadata: dict[str, Any],
 ) -> dict[str, Any]:
     """Build progress, usage, and latency metrics from durable records."""
     predictions, decisions = load_model_records(directory)
-    allowed = set(labels)
-    successful = sum(record.get("label") in allowed for record in predictions.values())
+    successful_ids = {
+        example_id
+        for example_id, record in predictions.items()
+        if prediction_status(record, schema)[0] == "valid"
+    }
     usage_values: dict[str, list[int | float | None]] = {field: [] for field in USAGE_FIELDS}
     resolved_models: list[str] = []
     resolved_providers: list[str] = []
@@ -187,7 +202,7 @@ def summarize_model_records(
         _extend_unique(resolved_providers, decision.get("resolved_providers", []))
         latency = _latency_value(decision.get("latency_seconds"), example_id)
         all_decision_latencies.append(latency)
-        if predictions[example_id].get("label") in allowed:
+        if example_id in successful_ids:
             successful_decision_latencies.append(latency)
         calls = decision.get("calls")
         if not isinstance(calls, list):
@@ -205,8 +220,8 @@ def summarize_model_records(
     return {
         "expected": expected,
         "attempted": len(predictions),
-        "successful": successful,
-        "failed": len(predictions) - successful,
+        "successful": len(successful_ids),
+        "failed": len(predictions) - len(successful_ids),
         "elapsed_seconds": measurement_elapsed,
         "total_elapsed_seconds": sum(
             attempt.get("elapsed_seconds", 0.0) for attempt in attempts if isinstance(attempt, dict)

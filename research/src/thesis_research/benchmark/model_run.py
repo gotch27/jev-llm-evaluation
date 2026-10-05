@@ -22,18 +22,18 @@ from thesis_research.benchmark.progress import (
 )
 from thesis_research.benchmark.types import ModelSpec
 from thesis_research.clients import DecisionClient, create_decision_client
-from thesis_research.datasets import Banking77Example
+from thesis_research.datasets import DatasetExample, ReferenceSchema
 from thesis_research.prediction import predict_examples
 from thesis_research.run_storage import write_json
-from thesis_research.tasks import IntentClassificationTask
+from thesis_research.tasks import StructuredTask
 
 
 async def run_model(
     spec: ModelSpec,
     directory: Path,
-    examples: Sequence[Banking77Example],
-    labels: Sequence[str],
-    task: IntentClassificationTask,
+    examples: Sequence[DatasetExample],
+    schema: ReferenceSchema,
+    task: StructuredTask,
     *,
     example_concurrency: int,
     llm_output_mode: str,
@@ -59,7 +59,7 @@ async def run_model(
     predictions, decisions = load_model_records(directory)
     expected_ids = {example.id for example in examples}
     validate_model_records(predictions, decisions, expected_ids)
-    previous_summary = summarize_model_records(directory, len(examples), labels, metadata)
+    previous_summary = summarize_model_records(directory, len(examples), schema, metadata)
     observer.model_started(spec.id, ModelProgress.from_summary(previous_summary))
     remaining = [example for example in examples if example.id not in predictions]
     if not remaining:
@@ -113,11 +113,11 @@ async def run_model(
                         decision_client,
                         remaining,
                         task,
-                        labels,
+                        schema,
                         output,
                         diagnostics,
                         max_concurrency=example_concurrency,
-                        record_choice_details=recorded_output_mode != "label",
+                        record_answer_details=recorded_output_mode != "discrete",
                         on_progress=record_progress,
                         on_prediction=record_prediction,
                     )
@@ -125,7 +125,7 @@ async def run_model(
         attempt["elapsed_seconds"] = time.perf_counter() - started
         attempt["finished_at"] = datetime.now(UTC).isoformat()
         attempt["status"] = "completed"
-        summary = summarize_model_records(directory, len(examples), labels, metadata)
+        summary = summarize_model_records(directory, len(examples), schema, metadata)
         write_json(directory / "summary.json", summary)
         metadata["progress"] = summary
         metadata["status"] = "completed"

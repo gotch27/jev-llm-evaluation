@@ -3,16 +3,16 @@
 import argparse
 import asyncio
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from thesis_research.benchmark import resume_benchmark, run_benchmark
 from thesis_research.config import load_task_config
-from thesis_research.datasets import load_prepared_banking77, prepare_banking77
+from thesis_research.datasets import load_prepared_dataset, prepare_dataset, reference_class
 from thesis_research.terminal import BenchmarkTerminal
 
-DEFAULT_CONFIG = Path("experiments/intent_classification/tasks/banking77.toml")
 DEFAULT_BENCHMARK_OUTPUT = Path("outputs/benchmarks")
 
 
@@ -52,9 +52,21 @@ def main() -> None:
 
         config = load_task_config(args.config)
         if args.command == "prepare":
-            print(prepare_banking77(args.data_dir, config.dataset_revision))
+            print(
+                prepare_dataset(
+                    args.data_dir,
+                    config.dataset.id,
+                    config.dataset.revision,
+                )
+            )
             return
-        _inspect_training_data(args.data_dir, config.dataset_revision, args.limit)
+        _inspect_data(
+            args.data_dir,
+            config.dataset.id,
+            config.dataset.revision,
+            args.split,
+            args.limit,
+        )
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, f"Error: {error}\n")
 
@@ -63,12 +75,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
 
-    prepare = commands.add_parser("prepare", help="Download and verify BANKING77")
+    prepare = commands.add_parser("prepare", help="Download and verify the configured dataset")
     _add_shared_arguments(prepare)
 
-    inspect = commands.add_parser("inspect", help="Print training labels and examples")
+    inspect = commands.add_parser("inspect", help="Print references and examples from one split")
     _add_shared_arguments(inspect)
     inspect.add_argument("--limit", type=int, default=5)
+    inspect.add_argument("--split", default="train")
 
     benchmark = commands.add_parser("benchmark", help="Run or resume a coordinated benchmark")
     source = benchmark.add_mutually_exclusive_group(required=True)
@@ -89,18 +102,31 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
 
 
-def _inspect_training_data(data: Path, revision: str, limit: int) -> None:
+def _inspect_data(
+    data: Path,
+    dataset_id: str,
+    revision: str,
+    split: str,
+    limit: int,
+) -> None:
     if limit < 0:
         raise ValueError("limit must be nonnegative")
-    labels, examples, _ = load_prepared_banking77(data, revision, "train")
-    print(f"Training examples: {len(examples)}; labels: {len(labels)}")
-    print(json.dumps(labels, ensure_ascii=False))
-    for example in examples[:limit]:
-        print(json.dumps(vars(example), ensure_ascii=False))
+    prepared = load_prepared_dataset(data, dataset_id, revision, split)
+    distribution: dict[str, int] = {}
+    for example in prepared.examples:
+        key = reference_class(example.reference)
+        distribution[key] = distribution.get(key, 0) + 1
+    print(
+        f"Dataset: {dataset_id}; split: {split}; examples: {len(prepared.examples)}; "
+        f"reference type: {prepared.reference_schema.question_type}"
+    )
+    print(json.dumps(distribution, ensure_ascii=False))
+    for example in prepared.examples[:limit]:
+        print(json.dumps(asdict(example), ensure_ascii=False))
 
 
 if __name__ == "__main__":

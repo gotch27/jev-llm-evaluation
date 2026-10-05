@@ -1,9 +1,14 @@
 name = "BANKING77 intent classification (without criteria)"
-dataset_revision = "57ec275d8078af65b7731c2a98be812d844a6d6b"
+
+[dataset]
+id = "banking77"
+revision = "57ec275d8078af65b7731c2a98be812d844a6d6b"
+
+[state.fields]
+customer_message = "text"
 
 [question]
 type = "choice"
-state_field = "customer_message"
 id = "intent"
 instructions = "Classify the supplied customer message into the single listed banking intent that best matches the customer’s primary request or problem. Use the banking feature or transaction type and its stated status, such as pending, declined, reverted, missing, unrecognized, or charged a fee, to distinguish similar intents. Use only information in the customer message and do not infer unstated events. Every message belongs to one listed intent; when wording is brief or ambiguous, select the closest supported intent."
 

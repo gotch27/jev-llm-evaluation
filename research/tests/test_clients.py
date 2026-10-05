@@ -2,6 +2,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 
+import httpx2
 import pytest
 from system_one_adapter.providers import Message, ProviderResult
 from typesafe_sdk import (
@@ -20,6 +21,7 @@ from typesafe_sdk import (
 from thesis_research.clients import JevDecisionClient, VercelLLMDecisionClient
 from thesis_research.clients import jev as jev_module
 from thesis_research.clients import vercel_provider as vercel_provider_module
+from thesis_research.clients.gateway_metadata import reported_cost, resolved_provider
 from thesis_research.clients.vercel_provider import (
     VercelGatewayProvider,
     VercelGatewayProviderResult,
@@ -48,7 +50,7 @@ class FakeJevClient:
         self.calls.append((state, questions, kwargs))
         if self.error:
             raise self.error
-        return SystemOneResponse(
+        payload = SystemOneResponse(
             model="typesafe-ai/jev",
             usage=Usage(input_tokens=12, output_tokens=0),
             answers={
@@ -66,6 +68,20 @@ class FakeJevClient:
                     "probabilities": {0: 0.0, 1: 0.2, 2: 0.8},
                 },
             },
+        ).model_dump(mode="json")
+        payload["provider_metadata"] = {
+            "gateway": {
+                "cost": "0.0001",
+                "generationId": "offline-generation",
+                "routing": {"resolvedProvider": "typesafe-ai"},
+            }
+        }
+        return SystemOneResponse.from_http_response(
+            httpx2.Response(
+                200,
+                json=payload,
+                request=httpx2.Request("POST", "https://example.test/systemone"),
+            )
         )
 
     async def aclose(self):
@@ -114,7 +130,7 @@ class FakeAdapterProvider:
                 return ProviderResult(text="not JSON", input_tokens=10, output_tokens=2)
             answers = (
                 {"relevant": True, "intent": "card", "urgency": 2}
-                if self.output_mode == "label"
+                if self.output_mode == "discrete"
                 else {
                     "relevant": 0.8,
                     "intent": {"card": 0.6, "cash": 0.2},
@@ -157,7 +173,11 @@ def test_jev_sends_all_questions_in_one_call_and_closes():
     assert result.requested_model == result.resolved_models[0] == "typesafe-ai/jev"
     assert result.resolved_providers == ("typesafe-ai",)
     assert result.usage.input_tokens == 12
-    assert result.usage.retries is None
+    assert result.usage.cost_usd == pytest.approx(0.0001)
+    assert result.usage.retries == 0
+    assert result.calls[0].raw["provider_metadata"]["gateway"]["generationId"] == (
+        "offline-generation"
+    )
     assert fake.closed
 
 
@@ -234,26 +254,37 @@ def test_vercel_preserves_partial_failure():
     assert result.usage.cost_usd is None
 
 
-def test_vercel_label_mode_uses_discrete_schema():
+def test_vercel_discrete_mode_uses_discrete_schemas():
+    output_mode = "discrete"
+
     async def run():
-        provider = FakeAdapterProvider(output_mode="label")
+        provider = FakeAdapterProvider(output_mode=output_mode)
         client = VercelLLMDecisionClient(
             provider.model_name,
             "openai",
-            output_mode="label",
+            output_mode=output_mode,
             retry=RetryPolicy(max_retries=0),
             _provider=provider,
         )
-        result = await client.evaluate("A message", {"intent": QUESTIONS["intent"]})
+        result = await client.evaluate("A message", QUESTIONS)
         await client.aclose()
         return provider, result
 
     provider, result = asyncio.run(run())
-    _, _, schema, _ = provider.calls[0]
-    intent_schema = schema["$defs"]["TypeSafeAnswers"]["properties"]["intent"]
+    schemas = {
+        question_id: schema["$defs"]["TypeSafeAnswers"]["properties"][question_id]
+        for question_id, _, schema, _ in provider.calls
+    }
+    intent_schema = schemas["intent"]
     assert intent_schema["enum"] == ["card", "cash"]
+    assert schemas["relevant"]["type"] == "boolean"
+    assert schemas["urgency"]["type"] == "integer"
+    assert result.errors == {}
     assert result.answers["intent"].choice == "card"
     assert result.answers["intent"].probabilities == {"card": 1.0, "cash": 0.0}
+    assert result.answers["relevant"].noul == 1.0
+    assert result.answers["urgency"].score == 2.0
+    assert result.answers["urgency"].probabilities == {0: 0.0, 1: 0.0, 2: 1.0}
 
 
 def test_vercel_does_not_retry_malformed_output():
@@ -332,6 +363,8 @@ def test_missing_credentials_and_aliases_fail_before_network(monkeypatch):
         VercelLLMDecisionClient("vercel/auto", "openai")
     with pytest.raises(ValueError, match="output_mode"):
         VercelLLMDecisionClient("openai/exact-model", "openai", output_mode="confidence")
+    with pytest.raises(ValueError, match="output_mode"):
+        VercelLLMDecisionClient("openai/exact-model", "openai", output_mode="label")
     with pytest.raises(ValueError, match="reasoning effort"):
         VercelLLMDecisionClient(
             "openai/exact-model",
@@ -476,3 +509,153 @@ def test_vercel_provider_rejects_unstructured_mode():
         await provider.aclose()
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("cost", [0, "0", "0.0025", None, True, -1, "nan", "inf", "bad"])
+def test_gateway_cost_keeps_unknown_distinct_from_zero(cost):
+    raw = {"provider_metadata": {"gateway": {"cost": cost}}}
+    expected = float(cost) if cost in (0, "0", "0.0025") and cost is not True else None
+    assert reported_cost(raw) == expected
+
+
+def test_gateway_routing_requires_reported_metadata():
+    assert resolved_provider({}) is None
+    assert (
+        resolved_provider(
+            {"providerMetadata": {"gateway": {"routing": {"finalProvider": "typesafe-ai"}}}}
+        )
+        == "typesafe-ai"
+    )
+
+
+def _http_jev_payload():
+    return {
+        "model": "typesafe-ai/jev",
+        "usage": {"input_tokens": 12, "output_tokens": 0},
+        "answers": {"relevant": {"type": "noul", "noul": 0.9}},
+        "provider_metadata": {
+            "gateway": {
+                "cost": "0.0001",
+                "generationId": "offline-generation",
+                "routing": {"resolvedProvider": "typesafe-ai"},
+            }
+        },
+    }
+
+
+def test_jev_http_retries_are_isolated_between_concurrent_examples(monkeypatch):
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
+    attempts = {}
+    active = 0
+    max_active = 0
+
+    async def reply(request):
+        nonlocal active, max_active
+        state = json.loads(request.content)["state"]
+        attempts[state] = attempts.get(state, 0) + 1
+        active += 1
+        max_active = max(max_active, active)
+        try:
+            await asyncio.sleep(0)
+            if state == "retry" and attempts[state] == 1:
+                return httpx2.Response(503, json={"message": "offline transient failure"})
+            return httpx2.Response(200, json=_http_jev_payload())
+        finally:
+            active -= 1
+
+    async def run():
+        async with JevDecisionClient(
+            "typesafe-ai/jev",
+            max_concurrency=2,
+            retry=RetryPolicy(backoff_initial=0, backoff_max=0),
+            _transport=httpx2.MockTransport(reply),
+        ) as client:
+            return await asyncio.gather(
+                client.evaluate("retry", {"relevant": QUESTIONS["relevant"]}),
+                client.evaluate("first-attempt", {"relevant": QUESTIONS["relevant"]}),
+                client.evaluate("third-example", {"relevant": QUESTIONS["relevant"]}),
+            )
+
+    retried, first_attempt, third = asyncio.run(run())
+    assert attempts == {"retry": 2, "first-attempt": 1, "third-example": 1}
+    assert max_active == 2
+    assert [result.usage.retries for result in (retried, first_attempt, third)] == [1, 0, 0]
+    assert all(result.usage.cost_usd == 0.0001 for result in (retried, first_attempt, third))
+    assert "unused-test-key" not in json.dumps(retried.calls[0].raw)
+
+
+@pytest.mark.parametrize("failure", ["http", "connection"])
+def test_jev_exhausted_retries_are_recorded(monkeypatch, failure):
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
+    attempts = 0
+
+    def reply(request):
+        nonlocal attempts
+        attempts += 1
+        if failure == "connection":
+            raise httpx2.ConnectError("offline connection failure", request=request)
+        return httpx2.Response(
+            503,
+            json={"message": "offline unavailable"},
+            headers={"x-typesafe-request-id": "offline-request"},
+        )
+
+    async def run():
+        async with JevDecisionClient(
+            "typesafe-ai/jev",
+            retry=RetryPolicy(max_retries=2, backoff_initial=0, backoff_max=0),
+            _transport=httpx2.MockTransport(reply),
+        ) as client:
+            return await client.evaluate("A message", QUESTIONS)
+
+    result = asyncio.run(run())
+    assert attempts == 3
+    assert result.usage.retries == 2
+    assert result.usage.cost_usd is None
+    assert result.usage.input_tokens is None
+    assert result.errors.keys() == QUESTIONS.keys()
+    if failure == "http":
+        assert result.calls[0].raw["status"] == 503
+        assert result.calls[0].raw["request_id"] == "offline-request"
+        assert result.calls[0].raw["body"]["message"] == "offline unavailable"
+
+
+@pytest.mark.parametrize("backend", ["jev", "llm"])
+def test_provider_call_latency_excludes_queue_and_decision_latency_includes_it(
+    monkeypatch, backend
+):
+    clock = [0.0]
+    monkeypatch.setattr(jev_module.time, "perf_counter", lambda: clock[0])
+
+    class TimedJevClient(FakeJevClient):
+        async def system_one(self, *args, **kwargs):
+            clock[0] += 3
+            return await super().system_one(*args, **kwargs)
+
+    class TimedProvider(FakeAdapterProvider):
+        async def request(self, *args, **kwargs):
+            result = await super().request(*args, **kwargs)
+            clock[0] += 3
+            return result
+
+    async def run():
+        provider = TimedProvider(delay=0)
+        client = (
+            JevDecisionClient("typesafe-ai/jev", max_concurrency=1, _client=TimedJevClient())
+            if backend == "jev"
+            else VercelLLMDecisionClient(
+                provider.model_name, "openai", max_concurrency=1, _provider=provider
+            )
+        )
+        async with client:
+            async with client._semaphore:
+                pending = asyncio.create_task(
+                    client.evaluate("A message", {"relevant": QUESTIONS["relevant"]})
+                )
+                await asyncio.sleep(0)
+                clock[0] = 20
+            return await pending
+
+    result = asyncio.run(run())
+    assert result.latency_seconds == 23
+    assert result.calls[0].latency_seconds == 3

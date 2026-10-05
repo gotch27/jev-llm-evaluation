@@ -91,7 +91,21 @@ def test_cli_inspect(dataset, tmp_path):
     import sys
 
     config = tmp_path / "experiment.toml"
-    config.write_text(f'name = "synthetic CLI verification"\ndataset_revision = "{REVISION}"\n')
+    labels = json.loads((dataset / "categories.json").read_text())
+    options = "\n".join(f'[[question.options]]\nlabel = "{label}"' for label in labels)
+    config.write_text(
+        f'''name = "synthetic CLI verification"
+[dataset]
+id = "banking77"
+revision = "{REVISION}"
+[state.fields]
+customer_message = "text"
+[question]
+type = "choice"
+id = "intent"
+{options}
+'''
+    )
     common = ["--config", str(config), "--data-dir", str(tmp_path / "data")]
     command = [sys.executable, "-m", "thesis_research.cli"]
     inspected = subprocess.run(
@@ -99,6 +113,16 @@ def test_cli_inspect(dataset, tmp_path):
     )
     assert '"id": "train:1"' in inspected.stdout
     assert '"id": "test:1"' not in inspected.stdout
+
+
+@pytest.mark.parametrize("command", ["prepare", "inspect"])
+def test_cli_requires_an_explicit_config(command, capsys):
+    from thesis_research.cli import _build_parser
+
+    with pytest.raises(SystemExit) as error:
+        _build_parser().parse_args([command])
+    assert error.value.code == 2
+    assert "--config" in capsys.readouterr().err
 
 
 def test_reject_wrong_label_inventory(dataset):

@@ -7,6 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
 
+from thesis_research.datasets.types import (
+    ChoiceReference,
+    ChoiceReferenceSchema,
+    DatasetAdapter,
+    DatasetExample,
+    PreparedDataset,
+)
+
 REVISION = "57ec275d8078af65b7731c2a98be812d844a6d6b"
 SOURCE = "https://github.com/PolyAI-LDN/task-specific-datasets"
 FILES = ("categories.json", "train.csv", "test.csv")
@@ -28,7 +36,7 @@ class Banking77Example:
 
 
 def sha256_bytes(data: bytes) -> str:
-    """Return the lowercase SHA-256 digest for an in-memory byte sequence."""
+    """Fingerprint exact file bytes for manifest and saved-input verification."""
     return hashlib.sha256(data).hexdigest()
 
 
@@ -139,3 +147,31 @@ def load_banking77(directory: Path, split: str) -> tuple[list[str], list[Banking
     if {example.label for example in examples} != set(labels):
         raise ValueError(f"Split {split} does not contain all 77 labels")
     return labels, examples, manifest
+
+
+class Banking77Adapter(DatasetAdapter):
+    """Load BANKING77 source rows through the shared dataset contract."""
+
+    dataset_id = "banking77"
+    supported_splits = ("train", "test")
+
+    def prepare(self, root: Path, revision: str) -> Path:
+        return prepare_banking77(root, revision)
+
+    def load(self, root: Path, revision: str, split: str) -> PreparedDataset:
+        labels, examples, manifest = load_prepared_banking77(root, revision, split)
+        return PreparedDataset(
+            dataset_id=self.dataset_id,
+            revision=revision,
+            split=split,
+            examples=tuple(
+                DatasetExample(
+                    id=example.id,
+                    state={"text": example.text},
+                    reference=ChoiceReference(example.label),
+                )
+                for example in examples
+            ),
+            reference_schema=ChoiceReferenceSchema(tuple(labels)),
+            manifest=manifest,
+        )

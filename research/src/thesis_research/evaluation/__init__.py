@@ -1,11 +1,13 @@
-"""Provider-independent classification parsing and metrics."""
+"""Provider-independent structured prediction parsing and metrics."""
 
-from thesis_research.evaluation.classification import (
-    evaluate_classification,
+from thesis_research.evaluation.structured import (
+    evaluate_structured,
+    prediction_status,
     read_prediction_jsonl,
 )
 
 __all__ = [
-    "evaluate_classification",
+    "evaluate_structured",
+    "prediction_status",
     "read_prediction_jsonl",
 ]

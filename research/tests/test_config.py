@@ -26,11 +26,15 @@ def test_choice_criteria_accept_string_object_array_and_omission(tmp_path):
     path = tmp_path / "generic-choice.toml"
     path.write_text(
         f'''name = "generic choice"
-dataset_revision = "{REVISION}"
+[dataset]
+id = "banking77"
+revision = "{REVISION}"
+
+[state.fields]
+message = "text"
 
 [question]
 type = "choice"
-state_field = "message"
 id = "decision"
 instructions = ["Select one label", "Use only the state"]
 
@@ -67,7 +71,7 @@ label = "none"
 @pytest.mark.parametrize(
     ("old", "new", "message"),
     [
-        ('type = "choice"', 'type = "score"', "type must be choice"),
+        ('type = "choice"', 'type = "score"', "missing=.*levels"),
         ('label = "card_arrival"', 'label = " "', "label must be a nonempty"),
         (
             'criterion.distinguish_from = "Use card_delivery_estimate',
@@ -91,11 +95,15 @@ def test_rejects_toml_values_that_are_not_json_content(tmp_path):
     path = tmp_path / "non-json.toml"
     path.write_text(
         f'''name = "non-JSON criterion"
-dataset_revision = "{REVISION}"
+[dataset]
+id = "banking77"
+revision = "{REVISION}"
+
+[state.fields]
+message = "text"
 
 [question]
 type = "choice"
-state_field = "message"
 id = "decision"
 
 [[question.options]]
@@ -106,4 +114,37 @@ criterion = 1979-05-27T07:32:00Z
     )
 
     with pytest.raises(ValueError, match="criterion must be a string, object, or array"):
+        load_task_config(path)
+
+
+def test_rejects_retired_task_format(tmp_path):
+    path = tmp_path / "old-task.toml"
+    path.write_text(f'name = "old task"\ndataset_revision = "{REVISION}"\n')
+    with pytest.raises(ValueError, match="missing=.*dataset.*question.*state"):
+        load_task_config(path)
+
+
+@pytest.mark.parametrize("table", ["state", "question"])
+def test_requires_state_and_question_tables(tmp_path, table):
+    import tomllib
+
+    # Use a minimal current task, omitting exactly the table being checked.
+    source = """name = "fixture"
+[dataset]
+id = "boolq"
+revision = "fixture"
+[state.fields]
+passage = "passage"
+[question]
+type = "noul"
+id = "answer"
+"""
+    sections = {
+        "state": '[state.fields]\npassage = "passage"\n',
+        "question": '[question]\ntype = "noul"\nid = "answer"\n',
+    }
+    path = tmp_path / "missing-table.toml"
+    path.write_text(source.replace(sections[table], ""))
+    assert table not in tomllib.loads(path.read_text())
+    with pytest.raises(ValueError, match=f"missing=.*{table}"):
         load_task_config(path)

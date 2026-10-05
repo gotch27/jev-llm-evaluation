@@ -34,7 +34,12 @@ def runner_environment(location: str | None) -> dict[str, str]:
 
 
 def latency_statistics(values: Sequence[float]) -> dict[str, int | float | None]:
-    """Summarize nonnegative durations using linear-interpolated percentiles."""
+    """Summarize nonnegative durations using linear-interpolated percentiles.
+
+    p50 is the median; p90 and p95 describe the slower tail of observed calls.
+    Interpolation can produce a duration not present in the measurements.
+    Small cohorts provide only a coarse description of tail latency.
+    """
     durations = [float(value) for value in values]
     if any(not math.isfinite(value) or value < 0 for value in durations):
         raise ValueError("Latency values must be finite and nonnegative")

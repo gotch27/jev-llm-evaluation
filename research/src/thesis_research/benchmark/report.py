@@ -6,18 +6,20 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Sequence
 
+from thesis_research.benchmark.model_records import load_model_records, validate_model_records
 from thesis_research.benchmark.timing import latency_fields
 from thesis_research.benchmark.types import ModelSpec
-from thesis_research.datasets import Banking77Example
-from thesis_research.evaluation import evaluate_classification, read_prediction_jsonl
+from thesis_research.datasets import DatasetExample, ReferenceSchema
+from thesis_research.evaluation import evaluate_structured
 from thesis_research.run_storage import artifact_metadata, write_json
+from thesis_research.tasks import class_labels
 
 
 def generate_report(
     run: Path,
     models: Sequence[ModelSpec],
-    examples: list[Banking77Example],
-    labels: list[str],
+    examples: list[DatasetExample],
+    schema: ReferenceSchema,
 ) -> dict[str, Any]:
     """Evaluate every model and compare each LLM with the Jev baseline.
 
@@ -31,19 +33,20 @@ def generate_report(
     model_outcomes: dict[str, list[dict[str, Any]]] = {}
     model_execution: dict[str, dict[str, Any]] = {}
     model_decisions: dict[str, dict[str, dict[str, Any]]] = {}
+    expected_ids = {example.id for example in examples}
     for model in models:
-        predictions = read_prediction_jsonl(
-            (run / "models" / model.id / "predictions.jsonl").read_bytes()
-        )
-        if set(predictions) != {example.id for example in examples}:
+        directory = run / "models" / model.id
+        predictions, decisions = load_model_records(directory)
+        validate_model_records(predictions, decisions, expected_ids)
+        if set(predictions) != expected_ids:
             raise ValueError(f"Model {model.id} does not have a complete cohort")
-        summary, outcomes = evaluate_classification(examples, labels, predictions)
+        summary, outcomes = evaluate_structured(examples, schema, predictions)
         model_summaries[model.id] = summary
         model_outcomes[model.id] = outcomes
         model_execution[model.id] = json.loads(
-            (run / "models" / model.id / "summary.json").read_text(encoding="utf-8")
+            (directory / "summary.json").read_text(encoding="utf-8")
         )
-        model_decisions[model.id] = _read_decisions(run / "models" / model.id / "decisions.jsonl")
+        model_decisions[model.id] = decisions
 
     baseline = next(model for model in models if model.backend == "jev")
     comparisons = [
@@ -52,12 +55,14 @@ def generate_report(
             candidate,
             model_summaries,
             model_outcomes,
+            schema.question_type,
         )
         for candidate in models
         if candidate.id != baseline.id
     ]
     benchmark_metadata = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
     summary = {
+        "question_type": schema.question_type,
         "baseline_model_id": baseline.id,
         "runner": benchmark_metadata.get("runner"),
         "runner_attempts": [
@@ -73,33 +78,7 @@ def generate_report(
     _write_jsonl(
         report / "model_metrics.jsonl",
         (
-            {
-                "model_id": model.id,
-                "backend": model.backend,
-                "model": model.model,
-                "provider": model.provider,
-                "reasoning_effort": model.reasoning_effort,
-                "total": model_summaries[model.id]["total"],
-                "correct": model_summaries[model.id]["correct"],
-                "accuracy": model_summaries[model.id]["accuracy"],
-                "macro_f1": model_summaries[model.id]["macro_f1"],
-                **model_summaries[model.id]["prediction_counts"],
-                "elapsed_seconds": model_execution[model.id]["elapsed_seconds"],
-                "total_elapsed_seconds": model_execution[model.id]["total_elapsed_seconds"],
-                **latency_fields(
-                    "successful_decision_latency",
-                    model_execution[model.id]["latency"]["successful_decisions"],
-                ),
-                **latency_fields(
-                    "all_decision_latency",
-                    model_execution[model.id]["latency"]["all_decisions"],
-                ),
-                **latency_fields(
-                    "provider_call_latency",
-                    model_execution[model.id]["latency"]["provider_calls"],
-                ),
-                **model_execution[model.id]["usage"],
-            }
+            _model_metrics(model, model_summaries[model.id], model_execution[model.id])
             for model in models
         ),
     )
@@ -108,11 +87,12 @@ def generate_report(
         (
             {
                 "model_id": model.id,
+                "question_type": schema.question_type,
                 "label": label,
                 **model_summaries[model.id]["per_label"][label],
             }
             for model in models
-            for label in labels
+            for label in class_labels(schema)
         ),
     )
     _write_jsonl(report / "pairwise_statistics.jsonl", iter(comparisons))
@@ -123,12 +103,61 @@ def generate_report(
                 model.id,
                 outcome,
                 model_decisions[model.id][outcome["id"]],
+                schema.question_type,
             )
             for model in models
             for outcome in model_outcomes[model.id]
         ),
     )
     return summary
+
+
+def _model_metrics(
+    model: ModelSpec, summary: dict[str, Any], execution: dict[str, Any]
+) -> dict[str, Any]:
+    """Flatten model identity, task metrics, and measured execution into one row."""
+    return {
+        "model_id": model.id,
+        "backend": model.backend,
+        "model": model.model,
+        "provider": model.provider,
+        "reasoning_effort": model.reasoning_effort,
+        "question_type": summary["question_type"],
+        "total": summary["total"],
+        "correct": summary["correct"],
+        "accuracy": summary["accuracy"],
+        "macro_f1": summary["macro_f1"],
+        **{
+            field: summary.get(field)
+            for field in (
+                "probability_count",
+                "probability_coverage",
+                "brier_score",
+                "log_loss",
+                "numeric_count",
+                "numeric_coverage",
+                "mean_absolute_error",
+                "root_mean_squared_error",
+                "quadratic_weighted_kappa",
+            )
+        },
+        **summary["prediction_counts"],
+        "elapsed_seconds": execution["elapsed_seconds"],
+        "total_elapsed_seconds": execution["total_elapsed_seconds"],
+        **latency_fields(
+            "successful_decision_latency",
+            execution["latency"]["successful_decisions"],
+        ),
+        **latency_fields(
+            "all_decision_latency",
+            execution["latency"]["all_decisions"],
+        ),
+        **latency_fields(
+            "provider_call_latency",
+            execution["latency"]["provider_calls"],
+        ),
+        **execution["usage"],
+    }
 
 
 def exact_mcnemar_p_value(left_only: int, right_only: int) -> float:
@@ -162,6 +191,7 @@ def _compare_outcomes(
     candidate: ModelSpec,
     summaries: dict[str, dict[str, Any]],
     outcomes: dict[str, list[dict[str, Any]]],
+    question_type: str,
 ) -> dict[str, Any]:
     both_correct = baseline_only = candidate_only = neither = 0
     both_valid = agreement = 0
@@ -176,10 +206,11 @@ def _compare_outcomes(
         neither += int(not left_correct and not right_correct)
         if left["status"] == right["status"] == "valid":
             both_valid += 1
-            agreement += int(left["prediction"]["label"] == right["prediction"]["label"])
+            agreement += int(left["predicted_class"] == right["predicted_class"])
     baseline_accuracy = summaries[baseline.id]["accuracy"]
     candidate_accuracy = summaries[candidate.id]["accuracy"]
     return {
+        "question_type": question_type,
         "baseline_model_id": baseline.id,
         "comparison_model_id": candidate.id,
         "total": len(outcomes[baseline.id]),
@@ -204,15 +235,24 @@ def _flat_outcome(
     model_id: str,
     outcome: dict[str, Any],
     decision_record: dict[str, Any],
+    question_type: str,
 ) -> dict[str, Any]:
     prediction = outcome["prediction"]
     decision = decision_record["decision"]
     usage = decision["usage"]
     return {
         "model_id": model_id,
+        "question_type": question_type,
         "id": outcome["id"],
         "reference_label": outcome["reference_label"],
+        "reference_value": outcome["reference_value"],
+        "predicted_class": outcome["predicted_class"],
         "predicted_label": prediction.get("label") if prediction else None,
+        "predicted_value": prediction.get("value") if prediction else None,
+        "predicted_level": prediction.get("level") if prediction else None,
+        "score": prediction.get("score") if prediction else None,
+        "probability": prediction.get("probability") if prediction else None,
+        "probabilities": prediction.get("probabilities") if prediction else None,
         "confidence": prediction.get("confidence") if prediction else None,
         "error": prediction.get("error") if prediction else None,
         "status": outcome["status"],
@@ -220,18 +260,6 @@ def _flat_outcome(
         "latency_seconds": decision["latency_seconds"],
         **usage,
     }
-
-
-def _read_decisions(path: Path) -> dict[str, dict[str, Any]]:
-    records: dict[str, dict[str, Any]] = {}
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        record = json.loads(line)
-        if not isinstance(record, dict) or not isinstance(record.get("id"), str):
-            raise ValueError(f"Decision line {number} has no string ID")
-        if record["id"] in records:
-            raise ValueError(f"Duplicate decision ID: {record['id']}")
-        records[record["id"]] = record
-    return records
 
 
 def _write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:

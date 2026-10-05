@@ -8,7 +8,7 @@ size = 1
 seed = 20260920
 
 [llm_output]
-mode = "label"
+mode = "discrete"
 
 [execution]
 example_concurrency = 1

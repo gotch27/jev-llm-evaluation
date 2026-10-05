@@ -1,18 +1,19 @@
-name = "BANKING77 candidate model selection"
-task_config = "../tasks/banking77.toml"
+name = "BoolQ Noul smoke benchmark"
+task_config = "../tasks/boolq.toml"
 
 [cohort]
 split = "train"
 strategy = "stratified_random"
-size = 770
+size = 2
 seed = 20260920
 
 [llm_output]
-mode = "discrete"
+# Exercise the LLM P(true) response; use "discrete" for boolean-only output.
+mode = "probabilities"
 
 [execution]
 example_concurrency = 1
-model_concurrency = 1
+model_concurrency = 4
 
 [[models]]
 id = "jev"

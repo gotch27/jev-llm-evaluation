@@ -10,4 +10,4 @@ Open the repository root in your IDE. Read the Markdown documentation in `vault/
 
 Notes, source code, experiment configurations, tests, and the dependency lockfile are versioned together. Credentials, downloaded datasets, and generated runs are ignored. Record dataset revisions and output locations in experiment notes so ignored artifacts remain traceable.
 
-The existing Git repository and history are preserved. Research implementation is at the scaffold stage; no model experiments have run.
+The research code includes pinned dataset adapters, structured Jev and LLM clients, resumable benchmarks, and evaluation reports. Development runs are tracked separately from the final thesis evaluation.

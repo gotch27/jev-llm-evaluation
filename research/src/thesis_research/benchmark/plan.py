@@ -85,9 +85,7 @@ def _parse_cohort(value: object) -> CohortSpec:
         {"split", "strategy", "size", "seed"},
         "cohort",
     )
-    split = value["split"]
-    if split not in ("train", "test"):
-        raise ValueError("cohort split must be train or test")
+    split = _nonempty_string(value["split"], "cohort split")
     strategy = value["strategy"]
     if strategy not in ("all", "random", "stratified_random"):
         raise ValueError("cohort strategy must be all, random, or stratified_random")
@@ -114,8 +112,8 @@ def _parse_llm_output(value: object) -> LLMOutputSpec:
         raise ValueError("llm_output must be a table")
     _require_fields(value, {"mode"}, {"mode"}, "llm_output")
     mode = value["mode"]
-    if mode not in ("label", "probabilities"):
-        raise ValueError("llm_output mode must be label or probabilities")
+    if mode not in ("discrete", "probabilities"):
+        raise ValueError("llm_output mode must be discrete or probabilities")
     return LLMOutputSpec(cast(LLMOutputMode, mode))
 
 

@@ -10,14 +10,19 @@ import pytest
 from typesafe_sdk import ChoiceAnswer
 
 from thesis_research.benchmark import resume_benchmark, run_benchmark
-from thesis_research.benchmark.cohort import select_banking77_cohort
+from thesis_research.benchmark.cohort import select_cohort
 from thesis_research.benchmark.plan import load_benchmark_plan
 from thesis_research.benchmark.progress import ModelProgress, NullBenchmarkObserver
 from thesis_research.benchmark.report import exact_mcnemar_p_value
 from thesis_research.benchmark.types import CohortSpec
 from thesis_research.clients import CallRecord, DecisionError, DecisionResult, UsageTotals
 from thesis_research.config import load_task_config
-from thesis_research.datasets import Banking77Example, sha256_bytes
+from thesis_research.datasets import (
+    ChoiceReference,
+    ChoiceReferenceSchema,
+    DatasetExample,
+    sha256_bytes,
+)
 from thesis_research.datasets.banking77 import FILES, REVISION
 
 TASK_CONFIG = (
@@ -242,7 +247,7 @@ def write_plan(
     split="train",
     model_concurrency=2,
     example_concurrency=3,
-    llm_output_mode="label",
+    llm_output_mode="discrete",
 ):
     plan = tmp_path / "benchmark.toml"
     plan.write_text(
@@ -289,14 +294,18 @@ def test_plan_can_select_full_llm_probabilities(tmp_path):
     assert plan.llm_output.mode == "probabilities"
 
 
-def test_plan_rejects_invalid_split_and_llm_output_mode(tmp_path):
-    invalid_mode = write_plan(tmp_path, llm_output_mode="confidence")
-    with pytest.raises(ValueError, match="llm_output mode must be label or probabilities"):
+@pytest.mark.parametrize("mode", ["confidence", "label"])
+def test_plan_rejects_invalid_split_and_llm_output_mode(tmp_path, mode):
+    invalid_mode = write_plan(tmp_path, llm_output_mode=mode)
+    with pytest.raises(
+        ValueError,
+        match="llm_output mode must be discrete or probabilities",
+    ):
         load_benchmark_plan(invalid_mode)
 
     invalid_split = write_plan(tmp_path)
-    invalid_split.write_text(invalid_split.read_text().replace('split = "train"', 'split = "dev"'))
-    with pytest.raises(ValueError, match="cohort split must be train or test"):
+    invalid_split.write_text(invalid_split.read_text().replace('split = "train"', 'split = " "'))
+    with pytest.raises(ValueError, match="cohort split must be a nonempty"):
         load_benchmark_plan(invalid_split)
 
 
@@ -413,10 +422,10 @@ def test_one_command_runs_all_models_and_writes_analysis_ready_report(
     }
     assert (
         json.loads((run / "models" / "llm-a" / "metadata.json").read_text())["output_mode"]
-        == "label"
+        == "discrete"
     )
     llm_decision = read_jsonl(run / "models" / "llm-a" / "decisions.jsonl")[0]["decision"]
-    assert llm_decision["choice_output_mode"] == "label"
+    assert llm_decision["answer_output_mode"] == "discrete"
     assert llm_decision["answers"]["intent"] == {"type": "choice", "choice": labels[1]}
     assert llm_decision["calls"][0]["raw"] == {"response": {"label": labels[1]}}
 
@@ -613,9 +622,124 @@ def test_exact_mcnemar_p_value():
 
 
 def test_random_smoke_cohort_is_small_and_reproducible():
-    examples = [Banking77Example(f"train:{index}", str(index), "intent") for index in range(10)]
+    examples = [
+        DatasetExample(f"train:{index}", {"text": str(index)}, ChoiceReference("intent"))
+        for index in range(10)
+    ]
     spec = CohortSpec("train", "random", 1, 20260920)
-    first = select_banking77_cohort(examples, ["intent"], spec)
-    second = select_banking77_cohort(examples, ["intent"], spec)
+    first = select_cohort(examples, ChoiceReferenceSchema(("intent",)), spec)
+    second = select_cohort(examples, ChoiceReferenceSchema(("intent",)), spec)
     assert first == second
     assert len(first) == 1
+
+
+def test_invalid_state_mapping_stops_every_model_before_execution(benchmark_dataset, tmp_path):
+    data, labels = benchmark_dataset
+    task = tmp_path / "invalid-task.toml"
+    task.write_text(
+        TASK_CONFIG.read_text().replace(
+            'customer_message = "text"', 'customer_message = "missing_text"'
+        )
+    )
+    plan = write_plan(tmp_path)
+    plan.write_text(plan.read_text().replace(json.dumps(str(TASK_CONFIG)), json.dumps(str(task))))
+    clients = {
+        name: FakeDecisionClient(labels, model_id=name) for name in ("jev", "llm-a", "llm-b")
+    }
+    with pytest.raises(ValueError, match="Invalid task state mappings.*missing_text"):
+        asyncio.run(run_benchmark(plan, data, tmp_path / "outputs", _clients=clients))
+    assert all(client.calls == [] for client in clients.values())
+    run = next((tmp_path / "outputs").iterdir())
+    assert json.loads((run / "metadata.json").read_text())["status"] == "failed"
+
+
+@pytest.mark.parametrize("invalid_input", ["mode", "task", "cohort"])
+def test_resume_validates_retired_formats_before_archiving_errors(
+    benchmark_dataset, tmp_path, invalid_input
+):
+    from thesis_research.run_storage import file_checksum
+
+    data, labels = benchmark_dataset
+    plan = write_plan(tmp_path, model_concurrency=1, example_concurrency=1)
+    clients = {
+        "jev": FakeDecisionClient(labels, model_id="jev"),
+        "llm-a": FakeDecisionClient(labels, model_id="llm-a", failed_indexes={1}, raise_at=3),
+        "llm-b": FakeDecisionClient(labels, model_id="llm-b"),
+    }
+    with pytest.raises(ValueError, match="preserved record"):
+        asyncio.run(run_benchmark(plan, data, tmp_path / "outputs", _clients=clients))
+    run = next((tmp_path / "outputs").iterdir())
+    file = run / {"mode": "plan.toml", "task": "task.toml", "cohort": "cohort.json"}[invalid_input]
+    if invalid_input == "mode":
+        file.write_text(file.read_text().replace('mode = "discrete"', 'mode = "label"'))
+    elif invalid_input == "task":
+        file.write_text(f'name = "old task"\ndataset_revision = "{REVISION}"\n')
+    else:
+        cohort = json.loads(file.read_text())
+        cohort["examples"] = [
+            {"id": row["id"], "text": "old", "reference_label": "old"} for row in cohort["examples"]
+        ]
+        file.write_text(json.dumps(cohort))
+    metadata_path = run / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata["inputs"][file.name]["sha256"] = file_checksum(file)
+    metadata_path.write_text(json.dumps(metadata))
+    before = {path.relative_to(run): path.read_bytes() for path in run.rglob("*") if path.is_file()}
+    with pytest.raises(ValueError):
+        asyncio.run(resume_benchmark(run, data, retry_errors=True))
+    assert {
+        path.relative_to(run): path.read_bytes() for path in run.rglob("*") if path.is_file()
+    } == before
+
+
+@pytest.mark.parametrize("retry_errors", [False, True])
+@pytest.mark.parametrize(
+    "invalid_record",
+    ["missing_decision", "mismatched_prediction", "unknown_id", "missing_usage", "settings"],
+)
+def test_resume_validates_every_model_before_mutation_or_requests(
+    benchmark_dataset, tmp_path, retry_errors, invalid_record
+):
+    data, labels = benchmark_dataset
+    plan = write_plan(tmp_path, model_concurrency=1, example_concurrency=1)
+    clients = {
+        "jev": FakeDecisionClient(labels, model_id="jev", failed_indexes={1}),
+        "llm-a": FakeDecisionClient(labels, model_id="llm-a", failed_indexes={1}, raise_at=3),
+        "llm-b": FakeDecisionClient(labels, model_id="llm-b", failed_indexes={1}, raise_at=3),
+    }
+    with pytest.raises(ValueError, match="preserved record"):
+        asyncio.run(run_benchmark(plan, data, tmp_path / "outputs", _clients=clients))
+    run = next((tmp_path / "outputs").iterdir())
+    directory = run / "models" / "llm-b"
+    decisions_path = directory / "decisions.jsonl"
+    decisions = read_jsonl(decisions_path)
+    if invalid_record == "missing_decision":
+        decisions.pop()
+    elif invalid_record == "mismatched_prediction":
+        decisions[0]["prediction"]["label"] = labels[1]
+    elif invalid_record == "unknown_id":
+        predictions_path = directory / "predictions.jsonl"
+        predictions = read_jsonl(predictions_path)
+        predictions[0]["id"] = decisions[0]["id"] = "train:unexpected"
+        decisions[0]["prediction"]["id"] = "train:unexpected"
+        predictions_path.write_text("".join(json.dumps(row) + "\n" for row in predictions))
+    elif invalid_record == "missing_usage":
+        decisions[0]["decision"].pop("usage")
+    else:
+        metadata_path = directory / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["example_concurrency"] = 2
+        metadata_path.write_text(json.dumps(metadata))
+    decisions_path.write_text("".join(json.dumps(row) + "\n" for row in decisions))
+    before = {path.relative_to(run): path.read_bytes() for path in run.rglob("*") if path.is_file()}
+    resumed_clients = {
+        name: FakeDecisionClient(labels, model_id=name) for name in ("jev", "llm-a", "llm-b")
+    }
+    with pytest.raises(ValueError):
+        asyncio.run(
+            resume_benchmark(run, data, retry_errors=retry_errors, _clients=resumed_clients)
+        )
+    assert all(client.calls == [] for client in resumed_clients.values())
+    assert {
+        path.relative_to(run): path.read_bytes() for path in run.rglob("*") if path.is_file()
+    } == before

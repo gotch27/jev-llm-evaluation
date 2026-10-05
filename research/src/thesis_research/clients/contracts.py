@@ -59,7 +59,8 @@ class CallRecord:
         resolved_model: Model reported by the provider, when known.
         requested_provider: Provider requested by the experiment.
         resolved_provider: Provider that served the request, when known.
-        latency_seconds: Wall-clock duration of this call.
+        latency_seconds: Duration after acquiring a concurrency slot, including
+            SDK retries and their backoff, excluding local semaphore queue time.
         usage: Token, cost, and retry information for this call.
         error: Structured failure information, or ``None`` after success.
         raw: JSON-safe request, response, and diagnostic information.
@@ -88,7 +89,7 @@ class DecisionResult:
         resolved_models: Distinct models reported across underlying calls.
         resolved_providers: Distinct providers reported across underlying calls.
         usage: Usage aggregated across all underlying calls.
-        latency_seconds: End-to-end wall-clock duration of the decision.
+        latency_seconds: End-to-end duration, including semaphore queue time.
         calls: Individual provider-call records in question order.
     """
 

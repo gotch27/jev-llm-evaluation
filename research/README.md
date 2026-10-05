@@ -1,9 +1,10 @@
 # Research code
 
-Python components for the thesis experiments. The project prepares BANKING77, provides a shared
-structured interface for calling Jev and LLMs through Vercel AI Gateway, and runs coordinated
-benchmarks in which every configured model receives the same frozen cohort. Benchmark reports
-are saved as machine-readable tables for later statistical analysis and visualization.
+Python components for the thesis experiments. The project prepares pinned labeled datasets,
+builds one shared TypeSafe `Choice`, `Noul`, or `Score` question per task, calls Jev and LLMs
+through Vercel AI Gateway, and runs coordinated benchmarks in which every model receives the same
+frozen cohort. Reports are saved as machine-readable tables for later statistical analysis and
+visualization. BANKING77 is the Choice task and BoolQ is the first Noul task.
 
 See [Experiment configuration reference](CONFIGURATION.md) for complete task and benchmark TOML
 examples, supported fields, allowed values, and validation rules.
@@ -86,7 +87,7 @@ async def main() -> None:
     async with VercelLLMDecisionClient(
         model="creator/model-id",
         provider="upstream-provider-slug",
-        output_mode="label",
+        output_mode="discrete",
     ) as client:
         result = await client.evaluate("When will my card arrive?", questions)
         print(result.answers["intent"])
@@ -100,12 +101,12 @@ The examples call `load_dotenv()` because they are library-level Python scripts.
 application does this automatically. Do not put credentials in source files, TOML configurations,
 or command-line arguments.
 
-LLMs always use native structured output. `output_mode="label"` requires one exact Choice label;
-it does not ask for or save a self-reported confidence. `output_mode="probabilities"` requires a
-probability for every Choice label. Invalid probability sums are normalized, while the original
-values and normalization error remain in each call's raw diagnostics. Benchmark plans set this
-once for all configured LLMs. Jev continues to return its native probability distribution in
-either mode.
+LLMs always use native structured output. `output_mode="discrete"` requires only the structured
+decision needed by the task and does not invent confidence data. `output_mode="probabilities"`
+also requests the question-specific distribution. Invalid probability sums are normalized while
+the original values and normalization error remain in raw diagnostics. These are the only two
+output modes. Benchmark plans require an explicit mode shared by all configured LLMs. Jev retains
+its native answer details.
 
 LLM requests pin the upstream provider with Vercel's `only` option and omit the optional
 model-fallback list. They preserve the request and raw response, including routing and cost
@@ -114,26 +115,47 @@ metadata returned by the gateway, without authentication headers.
 `DecisionResult` provides typed `answers`, per-question `errors`, requested and resolved model and
 provider identifiers, aggregate token/cost/retry usage, total wall-clock latency, and individual
 call records. If any call has unknown usage or cost, that aggregate is `None` rather than an
-incomplete total. Vercel's TypeSafe-compatible response currently does not report per-request
-cost or the number of SDK retries, so those successful Jev fields are `None`.
+incomplete total. Jev requests are billed through AI Gateway. The client preserves the full HTTP
+response body because the TypeSafe SDK's typed response drops gateway extensions. Reported cost
+comes from `provider_metadata.gateway.cost`; routing and generation IDs remain in the raw record.
+Missing cost stays `None`, while an explicitly reported zero remains zero. See
+[Vercel's TypeSafe API response](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe).
+Jev HTTP attempts are counted separately for each evaluation, including exhausted retries and
+connection failures. A retry count of zero means the initial attempt was sufficient; `None` means
+the count could not be observed, such as a failure from an externally injected client.
 
 Both clients use the same explicit transient retry policy: two retries with bounded backoff,
 retry-after support, and a 30-second retry budget. HTTP calls have a 60-second timeout. Malformed
 LLM output is not retried. Model calling is asynchronous; always use the clients as async context
 managers or call `aclose()`.
 
-## Prepare and inspect BANKING77
+`DecisionClient` and `DatasetAdapter` are Python Protocols. The concrete clients and dataset
+adapters explicitly inherit their contracts to make those relationships visible. Each client's
+semaphore bounds its active requests across examples; it is separate from model concurrency.
+
+## Prepare and inspect datasets
 
 ```sh
-uv run thesis-research prepare
-uv run thesis-research inspect --limit 5
+uv run thesis-research prepare \
+  --config experiments/intent_classification/tasks/banking77.toml
+uv run thesis-research inspect \
+  --config experiments/intent_classification/tasks/banking77.toml \
+  --split train --limit 5
+
+uv run thesis-research prepare \
+  --config experiments/boolean_question_answering/tasks/boolq.toml
+uv run thesis-research inspect \
+  --config experiments/boolean_question_answering/tasks/boolq.toml \
+  --split validation --limit 2
 ```
 
-The default task configuration is
-`experiments/intent_classification/tasks/banking77.toml`. It defines all 77 labels and their
-criteria. Dataset splits belong to benchmark plans: use `split = "train"` for development and
-smoke checks, and reserve `split = "test"` for final evaluation. `inspect` always displays
-training examples.
+`prepare` and `inspect` read the dataset ID and revision from the selected task, then dispatch to
+its registered adapter. Both commands require `--config`; omission fails before any data work.
+`inspect` reads
+the split named by `--split` and prints its reference distribution plus JSON examples. Dataset
+adapters reject unsupported split names.
+
+### BANKING77 provenance
 
 Data comes from [PolyAI's official dataset repository](https://github.com/PolyAI-LDN/task-specific-datasets#banking),
 pinned to commit `57ec275d8078af65b7731c2a98be812d844a6d6b`. The source provides 10,003 training
@@ -150,6 +172,53 @@ When using it in the thesis, cite Casanueva et al. (2020),
 The loader returns examples with `id`, `text`, and `label`. IDs such as `train:1` and `test:1`
 use the split and one-based original CSV data-row number (excluding the header). They are
 stable within the pinned revision. Text, label spelling, and split membership are preserved.
+
+### BoolQ provenance
+
+BoolQ is downloaded directly from [Google’s Hugging Face repository](https://huggingface.co/datasets/google/boolq/tree/35b264d03638db9f4ce671b711558bf7ff0f80d5) at commit
+`35b264d03638db9f4ce671b711558bf7ff0f80d5`. The pinned Parquet files contain 9,427 training rows
+and 3,270 validation rows with the schema `question: string`, `answer: bool`, and
+`passage: string`. Their verified SHA-256 checksums are:
+
+- Train: `4f028e992c0bd4df30b9f056f4946b64f5c23028034ff0ed5ea467d8538cc623`
+- Validation: `52355d11524b4b874a9b9dcc278feb10f672d52c4f4eff9872e695ede59820f8`
+
+The training references contain 5,874 `true` and 3,553 `false` values. Validation contains
+2,033 `true` and 1,237 `false` values. The pinned adapter verifies these distributions as well as
+the files themselves.
+
+Files and a provenance manifest are stored under `data/boolq/<revision>/`. Preparation validates
+the checksum, Parquet schema, row counts, nonempty source fields, and the presence of both boolean
+classes. Stable IDs use the original one-based row position, such as `train:1` and
+`validation:1`. Cached files are verified before reuse; modified files stop loading.
+
+The source metadata lists [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
+The labeled validation split is reserved for held-out evaluation because the published test labels
+are unavailable. Training data is used for task development and the two-row smoke cohort.
+
+## Generic task definition
+
+A dataset example's `state` holds its source inputs. A task selects and renames those fields to
+build model state and defines exactly one structured question. The BoolQ
+state is `{"passage": ..., "question": ...}`; its hidden boolean answer becomes a typed Noul
+reference and is never sent to a model. Its frozen instruction is stored in
+`experiments/boolean_question_answering/tasks/boolq.toml`.
+
+In `[state.fields]`, the left side names the model input and the right side names an adapter's
+source field. For example, `customer_message = "text"` selects the adapter's `text` value and
+sends it under `customer_message`. Renaming the model key is supported; update instructions that
+mention it. Renaming a source field requires the adapter to supply that name. Before model calls,
+the task validates every mapping across the full prepared split and reports missing or empty
+fields together with counts and example IDs. Frozen cohort states must still match when resuming.
+
+A dataset revision identifies the exact source-repository commit, independently of the research
+code revision. SHA-256 fingerprints verify that cached data and frozen experiment inputs retain
+their exact bytes.
+
+The builder validates Choice labels and order against the dataset inventory, Noul tasks against a
+boolean reference schema, and Score rubric length against zero-based reference levels. See
+[Experiment configuration reference](CONFIGURATION.md) for complete Choice, Noul, and Score TOML
+forms, state mappings, criteria, prediction records, and metrics.
 
 ## BANKING77 Choice definition
 
@@ -198,16 +267,15 @@ then produces the same state and TypeSafe `Choice` for Jev or an LLM:
 from pathlib import Path
 
 from thesis_research.config import load_task_config
-from thesis_research.datasets import load_banking77
-from thesis_research.tasks import build_banking77_task
+from thesis_research.datasets import load_prepared_dataset
+from thesis_research.tasks import build_structured_task
 
 config_path = Path("experiments/intent_classification/tasks/banking77.toml")
 config = load_task_config(config_path)
-dataset_dir = Path("data/banking77") / config.dataset_revision
-labels, training_examples, _ = load_banking77(dataset_dir, "train")
-task = build_banking77_task(config, labels)
+prepared = load_prepared_dataset(Path("data"), config.dataset.id, config.dataset.revision, "train")
+task = build_structured_task(config, prepared.reference_schema)
 
-state = task.build_state(training_examples[0].text)
+state = task.build_state(prepared.examples[0].state)
 questions = task.questions()
 ```
 
@@ -235,7 +303,7 @@ size = 1
 seed = 20260920
 
 [llm_output]
-mode = "label"
+mode = "discrete"
 
 [execution]
 example_concurrency = 1
@@ -264,6 +332,7 @@ select the same example and differ only in the task definition.
 `banking77-timing-pilot.toml` is a separate training-only timing-method check using 10 random
 examples. It runs models and examples sequentially and measures every selected example, including
 the first request. It makes no additional warm-up calls and is not a thesis experiment.
+Ten examples check the timing machinery; they do not support dependable tail-latency estimates.
 
 `banking77-model-selection.toml` compares the same candidates on a deterministic, stratified
 training cohort of 770 messages: 10 examples from each of the 77 intents. This is development data
@@ -276,17 +345,18 @@ in file paths and reports. LLM providers are pinned; Jev is pinned to TypeSafe's
 the client. An LLM can set `reasoning_effort` to `none`, `minimal`, `low`, `medium`, `high`, or
 `xhigh`; omission leaves the provider default unchanged. The current candidate plans set
 Luna to `low` and disable reasoning for Gemini Flash Lite and Qwen Flash. Jev does not accept this
-field. `cohort.split` must be `train` or `test`. `random` selects any requested number of
-examples and is suitable for smoke checks. `stratified_random` requires at least 77 examples and
-selects every intent before adding a second example from any intent. A seed makes either selection
-repeatable. Use `strategy = "all"` without `size` or `seed` when the complete configured split
-should be evaluated.
+field. `cohort.split` is validated by the selected dataset: BANKING77 supports `train` and `test`,
+while BoolQ supports `train` and `validation`. `random` selects any requested number of examples
+and is suitable for smoke checks. `stratified_random` selects across Choice labels, boolean
+values, or Score levels before adding another example from a class. It therefore requires at
+least 77 examples for BANKING77 and at least two for BoolQ. A seed makes either selection
+repeatable. Use `strategy = "all"` without `size` or `seed` for the complete configured split.
 
-`llm_output.mode = "label"` makes every LLM return only the selected label. The current smoke
-plans choose this mode because accuracy and F1 do not require a probability. Set it to
-`"probabilities"` when an experiment needs the complete LLM distribution. The field is required;
-the software does not choose a mode implicitly. The setting does not change Jev's native output,
-and label mode does not produce a confidence value.
+`llm_output.mode = "discrete"` makes every LLM return only the structured decision needed for the
+task. Set it to `"probabilities"` when an experiment needs Choice distributions, BoolQ
+`P(true)`, or Score level probabilities. The field is required; the software does not choose a
+mode implicitly. The setting does not change Jev's native answer details, and discrete mode does not
+produce artificial confidence values.
 
 `example_concurrency` bounds active examples inside each model run. `model_concurrency` bounds how
 many models run at the same time. The smoke plan uses `4`, so Jev and all three LLMs are called
@@ -299,6 +369,15 @@ After preparing the data and setting `AI_GATEWAY_API_KEY`, run:
 ```sh
 uv run thesis-research benchmark \
   --plan experiments/intent_classification/benchmarks/banking77-smoke.toml \
+  --runner-location local-mac-oslo
+```
+
+The BoolQ smoke plan selects one `true` and one `false` training example and uses probability
+mode. It is versioned but is not executed by setup or tests:
+
+```sh
+uv run thesis-research benchmark \
+  --plan experiments/boolean_question_answering/benchmarks/boolq-smoke.toml \
   --runner-location local-mac-oslo
 ```
 
@@ -335,6 +414,13 @@ uv run thesis-research benchmark --resume RUN_DIRECTORY --retry-errors
 Successful predictions are retained. The removed error prediction and its complete decision
 diagnostics are appended to `models/<model-id>/retry_history.jsonl`, so recovery does not erase the
 original provider failure. Use this option only after the original process has stopped.
+
+Resume accepts the current task format, `discrete` or `probabilities`, and cohorts containing
+`state` and typed `reference` records. Earlier BANKING77 task formats, the retired `label` mode,
+and `{id,text,reference_label}` cohorts are unsupported. Historical outputs remain archival data;
+the software does not rewrite them or infer missing historical costs. Saved inputs and every
+model's settings, paired records, usage, and timing are validated before error records are
+archived or unfinished IDs are called. Invalid records leave the saved run unchanged.
 
 In an interactive terminal, the CLI keeps one progress row per model. Each row shows whether the
 model is waiting, running, done, or failed; completed examples; structurally valid and failed
@@ -386,37 +472,49 @@ report/pairwise_statistics.jsonl
 report/model_outcomes.jsonl
 ```
 
-`predictions.jsonl` contains one stable example ID and either a label or an explicit error. In LLM
-label mode it contains no confidence or probabilities. `decisions.jsonl` preserves the state,
-selected label, timing, usage, routing, raw response, and diagnostics for each call. Probability
-mode additionally preserves the distribution, normalization details, and confidence. Jev records
-its native distribution in both modes. Raw diagnostics can contain adapter internals, but they are
-not treated as a model-reported confidence in label mode. No API keys are saved. Model summaries
-record progress, measured and total elapsed time, latency distributions, and measured usage. The
-Vercel `usage.cost` value is accumulated when the gateway supplies it, which lets a smoke run inform
+`predictions.jsonl` contains one stable example ID and either a typed result or an explicit error.
+Choice rows use `label`; Noul rows use `value` and optionally `probability`; Score rows use
+`level`, expected `score`, and optional probability details. In LLM discrete mode, confidence and
+probability fields are omitted. `decisions.jsonl` preserves state, typed answers, timing, usage,
+routing, raw responses, and diagnostics. Probability mode additionally preserves distributions
+and normalization details. Jev records its native answer details. Raw diagnostics can contain
+adapter internals, but the evaluator uses only the documented prediction fields. No API keys are
+saved. Model summaries record progress, measured and total elapsed time, latency distributions,
+and measured usage. Vercel's reported cost is read from `usage.cost` or gateway metadata when
+available, which lets a smoke run inform
 the budget for a larger cohort. Incomplete provider usage becomes `null` instead of an understated
 total. Model metadata records its output mode and any explicit reasoning effort. Parent metadata
 records the dataset
 provenance, exact inputs and checksums, code revision, dirty-tree flag, runner environment,
 attempts, and status of every model.
 
+Decision latency includes waiting for a client semaphore. Individual provider-call latency starts
+after acquiring a slot and includes SDK retries and backoff. Both clients use these definitions.
+These durations also include network and SDK work. In each latency summary, `p50` is the median;
+`p90` and `p95` describe approximately the 90th and 95th percentiles. Values are linearly
+interpolated between measurements and can be durations no individual call took. Small cohorts
+provide only a coarse view of the slower tail.
+
 The report is generated automatically after every model has completed. It contains no graphs. Its
 JSON and JSONL files preserve the values needed to create graphs later:
 
-- `model_metrics.jsonl`: accuracy, macro-F1, correct and status counts, measured and total elapsed
-  time, p50/p90/p95 and other latency statistics, token usage, retry counts, and reported cost.
+- `model_metrics.jsonl`: question type, accuracy, macro-F1, correct and status counts, Noul or
+  Score metrics where applicable, measured and total elapsed time, latency statistics, token
+  usage, retry counts, and reported cost.
 - `per_label_metrics.jsonl`: precision, recall, F1, and support for every model-label pair.
-- `model_outcomes.jsonl`: one correctness/status row per model and example, including end-to-end
-  latency and usage.
+- `model_outcomes.jsonl`: one correctness/status row per model and example, including question
+  type, reference and predicted type-specific fields, end-to-end latency, and usage.
 - `pairwise_statistics.jsonl`: Jev versus each LLM, including accuracy difference, the paired
   correctness contingency table, valid-label agreement, and the exact two-sided McNemar p-value.
 - `summary.json`: the complete metrics above plus every model's confusion matrix.
 
-Accuracy is correct predictions divided by every cohort example, including invalid and failed
-predictions. Macro-F1 is the unweighted mean of all 77 intent F1 scores. Confusion-matrix rows are
-reference labels; columns are predicted labels plus `<unsuccessful>`. The McNemar result tests the
-paired difference in correctness because the models see the same examples. These saved tables can
-later be loaded into pandas, R, or plotting software without repeating paid calls.
+Accuracy is correct predictions divided by every cohort example, including missing, invalid, and
+failed predictions. Macro-F1 is the unweighted mean over the dataset’s discrete classes.
+Confusion-matrix rows are reference classes; columns are predicted classes plus `<unsuccessful>`.
+Noul adds Brier score, clipped log loss, and probability coverage. Score adds MAE, RMSE,
+quadratic weighted kappa, and numeric coverage. The McNemar result tests the paired difference in
+correctness because the models see the same examples. These tables can later be loaded into
+pandas, R, or plotting software without repeating paid calls.
 
 Latency summaries include successful decisions, all decisions, and individual provider calls.
 They report count, mean, population standard deviation, minimum, p50, p90, p95, and maximum using
@@ -431,7 +529,7 @@ results.
 
 ## Code layout and checks
 
-- `src/thesis_research/datasets/`: pinned data preparation and loading.
+- `src/thesis_research/datasets/`: shared typed examples, dataset registry, and pinned adapters.
 - `src/thesis_research/config.py`: typed, validated task configuration.
 - `src/thesis_research/tasks/`: validated state and question construction.
 - `src/thesis_research/clients/`: shared result contracts plus Jev and Vercel AI Gateway clients.
@@ -441,12 +539,12 @@ results.
 - `src/thesis_research/benchmark/timing.py`: runner provenance and latency statistics.
 - `src/thesis_research/benchmark/progress.py`: typed benchmark progress notifications.
 - `src/thesis_research/terminal.py`: Rich progress rows and human-readable event logs.
-- `src/thesis_research/evaluation/`: provider-independent prediction parsing and metrics.
+- `src/thesis_research/evaluation/structured.py`: provider-independent parsing and metrics for all
+  three question types.
 - `src/thesis_research/run_storage.py`: shared durable-record and Git metadata helpers.
 - `src/thesis_research/cli.py`: argument parsing and command dispatch only.
-- `experiments/intent_classification/tasks/`: versioned prompts, labels, and criteria.
-- `experiments/intent_classification/benchmarks/`: dataset split, LLM output, model, cohort, and
-  execution plans.
+- `experiments/*/tasks/`: versioned dataset, state mapping, question, labels/rubrics, and criteria.
+- `experiments/*/benchmarks/`: dataset split, LLM output, model, cohort, and execution plans.
 - `tests/`: offline tests with synthetic fixtures, not model experiments.
 - `data/` and `outputs/`: ignored dataset downloads and generated records.
 

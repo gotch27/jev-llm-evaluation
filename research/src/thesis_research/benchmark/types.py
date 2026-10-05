@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Literal
 
 Backend = Literal["jev", "llm"]
-DatasetSplit = Literal["train", "test"]
+DatasetSplit = str
 CohortStrategy = Literal["all", "random", "stratified_random"]
-LLMOutputMode = Literal["label", "probabilities"]
+LLMOutputMode = Literal["discrete", "probabilities"]
 ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
 
 
