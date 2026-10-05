@@ -8,6 +8,22 @@ Use authorized dated entries to retain decisions and their reasons, mentor feedb
 
 Add entries newest first when Gorazd authorizes saving them. Include the date, the agreed decision or change, its reason, and any approved follow-up actions.
 
+### 2026-10-06 — Reusable structured benchmark framework complete
+
+Committed the framework as `c93f2c4` after code review and readiness checks. Shared dataset, task, cohort, prediction, and evaluation contracts now support Choice, Noul, and Score, with pinned BANKING77 and BoolQ adapters. Removed retired task parsing, the `label` output alias, compatibility wrappers, and unused helpers; task configuration is explicit, and state mappings are validated across the full split before calls. Resume now checks every model's saved settings and records before rewriting error records or making requests. These changes make the experiment inputs and failure behavior explicit while preserving historical outputs.
+
+Corrected Jev recording to retain gateway cost and routing extensions from the full HTTP response and count actual HTTP retries, including exhausted attempts. Unknown cost remains unknown and is not evidence of free inference. Client timing now consistently separates semaphore waiting from provider-call duration. The committed framework snapshot passed 141 offline tests, Ruff lint and formatting, lock consistency, and staged diff checks; cached dataset splits and task mappings were also verified. Score has full synthetic benchmark and resume coverage, while no live BoolQ run is stored yet. Software completion is separate from thesis evaluation.
+
+Reviewed saved development artifacts and updated their status in [Intent Classification](Use%20Cases/Intent%20Classification.md). The September 20 interrupted run remains archival because its task, output mode, and cohort use retired formats. A separate 770-example comparison is complete, and the later smoke run records Jev cost. Final model selection and the held-out study configuration remain open. Local analysis code, notebooks, and the ten-example smoke plan remain uncommitted separately from the framework.
+
+### 2026-10-05 — BANKING77 smoke check records Jev cost
+
+The [ten-example training smoke run](Use%20Cases/Intent%20Classification.md#2026-10-05-ten-example-smoke-check) completed with valid predictions from all four candidates. It used discrete LLM output and four concurrent models on `local-mac-skopje`. Its saved Jev responses include nonzero gateway cost, serving-provider metadata, and observed retry counts. This provides successful Choice and cost-recording evidence; its small concurrent cohort does not establish comparative latency or model selection. The record predates `c93f2c4` and identifies `c55ac82` with a dirty working tree. Artifacts were reviewed on 2026-10-06.
+
+### 2026-10-01 — Training-only candidate comparison completed
+
+The [saved 770-example comparison](Use%20Cases/Intent%20Classification.md#2026-10-01-completed-candidate-comparison) completed for Jev, GPT-5.6 Luna, Gemini 2.5 Flash Lite, and Qwen 3.5 Flash, with 770 valid predictions per model. It began on September 30 in UTC, or October 1 in Europe/Skopje, and used the criteria task, discrete LLM output, 10 training examples per intent, and sequential execution. The saved record identifies `local-mac` and commit `c55ac82` with a dirty working tree. Historical Jev cost and retries are unavailable in this run. It is development evidence for reviewing candidates; no final model selection or held-out thesis evaluation is recorded. Frozen inputs, reports, and available model-artifact checksums were verified on 2026-10-06.
+
 ### 2026-09-20 — Candidate selection and recoverable provider failures
 
 Added the training-only BANKING77 candidate plan in code commit `ba6cf69`. It uses the criteria task, exact-label LLM output, a seeded stratified cohort of 770 training messages with 10 examples per intent, and sequential model and example execution. The development candidates are Jev, GPT-5.6 Luna through OpenAI at low reasoning, Gemini 2.5 Flash Lite through Google with reasoning disabled, and Qwen 3.5 Flash through Alibaba with reasoning disabled. These configurations support model selection and are not yet the frozen thesis comparison.
