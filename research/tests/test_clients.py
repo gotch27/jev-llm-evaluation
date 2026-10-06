@@ -18,8 +18,8 @@ from typesafe_sdk import (
     Usage,
 )
 
-from thesis_research.clients import JevDecisionClient, VercelLLMDecisionClient
-from thesis_research.clients import jev as jev_module
+from thesis_research.clients import VercelLLMDecisionClient, VercelSystemOneDecisionClient
+from thesis_research.clients import system_one as system_one_module
 from thesis_research.clients import vercel_provider as vercel_provider_module
 from thesis_research.clients.gateway_metadata import reported_cost, resolved_provider
 from thesis_research.clients.vercel_provider import (
@@ -38,6 +38,12 @@ QUESTIONS = {
         criteria=["Not urgent", "Urgent", "Critical"],
     ),
 }
+
+SYSTEM_ONE_ROUTES = (
+    ("typesafe-ai/jev", "typesafe-ai"),
+    ("convaiinnovations/laya", "boundless"),
+    ("liquid/d1", "liquid"),
+)
 
 
 class FakeJevClient:
@@ -158,7 +164,9 @@ class FakeAdapterProvider:
 def test_jev_sends_all_questions_in_one_call_and_closes():
     async def run():
         fake = FakeJevClient()
-        async with JevDecisionClient("typesafe-ai/jev", _client=fake) as client:
+        async with VercelSystemOneDecisionClient(
+            "typesafe-ai/jev", "typesafe-ai", _client=fake
+        ) as client:
             result = await client.evaluate("A message", QUESTIONS)
         return fake, result
 
@@ -184,7 +192,7 @@ def test_jev_sends_all_questions_in_one_call_and_closes():
 def test_jev_failure_is_recorded_for_every_question():
     async def run():
         fake = FakeJevClient(TypeSafeError("unavailable"))
-        client = JevDecisionClient("typesafe-ai/jev", _client=fake)
+        client = VercelSystemOneDecisionClient("typesafe-ai/jev", "typesafe-ai", _client=fake)
         result = await client.evaluate("A message", QUESTIONS)
         await client.aclose()
         return result
@@ -354,7 +362,7 @@ def test_vercel_evaluation_can_be_cancelled():
 def test_missing_credentials_and_aliases_fail_before_network(monkeypatch):
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
     with pytest.raises(ValueError, match="AI_GATEWAY_API_KEY"):
-        JevDecisionClient("typesafe-ai/jev")
+        VercelSystemOneDecisionClient("typesafe-ai/jev", "typesafe-ai")
     with pytest.raises(ValueError, match="AI_GATEWAY_API_KEY"):
         VercelLLMDecisionClient("openai/exact-model", "openai")
     with pytest.raises(ValueError, match="canonical"):
@@ -385,8 +393,8 @@ def test_jev_constructs_typesafe_client_for_vercel(monkeypatch):
             captured["closed"] = True
 
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
-    monkeypatch.setattr(jev_module, "AsyncTypeSafeClient", FakeConstructedClient)
-    client = JevDecisionClient("typesafe-ai/jev")
+    monkeypatch.setattr(system_one_module, "AsyncTypeSafeClient", FakeConstructedClient)
+    client = VercelSystemOneDecisionClient("typesafe-ai/jev", "typesafe-ai")
     asyncio.run(client.aclose())
 
     assert captured["api_key"] == "unused-test-key"
@@ -528,22 +536,25 @@ def test_gateway_routing_requires_reported_metadata():
     )
 
 
-def _http_jev_payload():
+def _http_system_one_payload(model="typesafe-ai/jev", provider="typesafe-ai"):
     return {
-        "model": "typesafe-ai/jev",
+        "model": model,
         "usage": {"input_tokens": 12, "output_tokens": 0},
         "answers": {"relevant": {"type": "noul", "noul": 0.9}},
         "provider_metadata": {
             "gateway": {
                 "cost": "0.0001",
                 "generationId": "offline-generation",
-                "routing": {"resolvedProvider": "typesafe-ai"},
+                "routing": {"resolvedProvider": provider},
             }
         },
     }
 
 
-def test_jev_http_retries_are_isolated_between_concurrent_examples(monkeypatch):
+@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+def test_system_one_http_retries_are_isolated_between_concurrent_examples(
+    monkeypatch, model, provider
+):
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
     attempts = {}
     active = 0
@@ -559,13 +570,14 @@ def test_jev_http_retries_are_isolated_between_concurrent_examples(monkeypatch):
             await asyncio.sleep(0)
             if state == "retry" and attempts[state] == 1:
                 return httpx2.Response(503, json={"message": "offline transient failure"})
-            return httpx2.Response(200, json=_http_jev_payload())
+            return httpx2.Response(200, json=_http_system_one_payload(model, provider))
         finally:
             active -= 1
 
     async def run():
-        async with JevDecisionClient(
-            "typesafe-ai/jev",
+        async with VercelSystemOneDecisionClient(
+            model,
+            provider,
             max_concurrency=2,
             retry=RetryPolicy(backoff_initial=0, backoff_max=0),
             _transport=httpx2.MockTransport(reply),
@@ -585,7 +597,8 @@ def test_jev_http_retries_are_isolated_between_concurrent_examples(monkeypatch):
 
 
 @pytest.mark.parametrize("failure", ["http", "connection"])
-def test_jev_exhausted_retries_are_recorded(monkeypatch, failure):
+@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+def test_system_one_exhausted_retries_are_recorded(monkeypatch, failure, model, provider):
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
     attempts = 0
 
@@ -601,8 +614,9 @@ def test_jev_exhausted_retries_are_recorded(monkeypatch, failure):
         )
 
     async def run():
-        async with JevDecisionClient(
-            "typesafe-ai/jev",
+        async with VercelSystemOneDecisionClient(
+            model,
+            provider,
             retry=RetryPolicy(max_retries=2, backoff_initial=0, backoff_max=0),
             _transport=httpx2.MockTransport(reply),
         ) as client:
@@ -620,12 +634,12 @@ def test_jev_exhausted_retries_are_recorded(monkeypatch, failure):
         assert result.calls[0].raw["body"]["message"] == "offline unavailable"
 
 
-@pytest.mark.parametrize("backend", ["jev", "llm"])
+@pytest.mark.parametrize("backend", ["system_one", "llm"])
 def test_provider_call_latency_excludes_queue_and_decision_latency_includes_it(
     monkeypatch, backend
 ):
     clock = [0.0]
-    monkeypatch.setattr(jev_module.time, "perf_counter", lambda: clock[0])
+    monkeypatch.setattr(system_one_module.time, "perf_counter", lambda: clock[0])
 
     class TimedJevClient(FakeJevClient):
         async def system_one(self, *args, **kwargs):
@@ -641,8 +655,10 @@ def test_provider_call_latency_excludes_queue_and_decision_latency_includes_it(
     async def run():
         provider = TimedProvider(delay=0)
         client = (
-            JevDecisionClient("typesafe-ai/jev", max_concurrency=1, _client=TimedJevClient())
-            if backend == "jev"
+            VercelSystemOneDecisionClient(
+                "typesafe-ai/jev", "typesafe-ai", max_concurrency=1, _client=TimedJevClient()
+            )
+            if backend == "system_one"
             else VercelLLMDecisionClient(
                 provider.model_name, "openai", max_concurrency=1, _provider=provider
             )
@@ -659,3 +675,188 @@ def test_provider_call_latency_excludes_queue_and_decision_latency_includes_it(
     result = asyncio.run(run())
     assert result.latency_seconds == 23
     assert result.calls[0].latency_seconds == 3
+
+
+@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("cost", [None, "0", "0.0025"])
+def test_system_one_http_routes_preserve_shared_questions_answers_and_metadata(
+    monkeypatch, model, provider, cost
+):
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
+    requests = []
+    # Large Choice tasks must reach every provider without altering the option set.
+    questions = {**QUESTIONS, "intent": Choice(criteria={f"intent-{i}": None for i in range(77)})}
+    state = {"message": "A card problem", "context": ["same", "frozen", "state"]}
+    payload = _http_system_one_payload(model, provider)
+    payload["answers"].update(
+        intent={
+            "type": "choice",
+            "choice": "intent-0",
+            "confidence": 0.8,
+            "probabilities": {f"intent-{i}": 1.0 if i == 0 else 0.0 for i in range(77)},
+        },
+        urgency={
+            "type": "score",
+            "score": 1.8,
+            "confidence": 0.7,
+            "legend": {"0": "Not urgent", "1": "Urgent", "2": "Critical"},
+            "probabilities": {"0": 0.0, "1": 0.2, "2": 0.8},
+        },
+    )
+    gateway = payload["provider_metadata"]["gateway"]
+    if cost is None:
+        gateway.pop("cost")
+    else:
+        gateway["cost"] = cost
+
+    def reply(request):
+        requests.append(request)
+        return httpx2.Response(200, json=payload)
+
+    async def run():
+        async with VercelSystemOneDecisionClient(
+            model, provider, _transport=httpx2.MockTransport(reply)
+        ) as client:
+            return await client.evaluate(state, questions)
+
+    result = asyncio.run(run())
+    assert len(requests) == 1
+    request = requests[0]
+    body = json.loads(request.content)
+    assert str(request.url) == "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
+    assert body["model"] == model
+    assert body["providerOptions"] == {"gateway": {"only": [provider]}}
+    assert body["state"] == state
+    assert body["questions"] == {
+        key: question.model_dump(mode="json", exclude_none=True)
+        for key, question in questions.items()
+    }
+    assert len(body["questions"]["intent"]["criteria"]) == 77
+    assert result.answers["intent"].choice == "intent-0"
+    assert result.answers["relevant"].noul == 0.9
+    assert result.answers["urgency"].score == 1.8
+    assert result.answers["urgency"].probabilities == {0: 0.0, 1: 0.2, 2: 0.8}
+    assert result.requested_model == model
+    assert result.resolved_models == (model,)
+    assert result.requested_provider == provider
+    assert result.resolved_providers == (provider,)
+    assert result.usage.input_tokens == 12
+    assert result.usage.output_tokens == 0
+    assert result.usage.cost_usd == (None if cost is None else float(cost))
+    assert result.usage.retries == 0
+    assert result.usage.malformed_response_retries == 0
+    assert result.latency_seconds >= result.calls[0].latency_seconds >= 0
+    assert result.calls[0].raw == payload
+    assert "unused-test-key" not in json.dumps(result.calls[0].raw)
+
+
+@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+def test_system_one_http_evaluation_cancellation_releases_concurrency(monkeypatch, model, provider):
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
+
+    async def run():
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        attempts = 0
+
+        async def reply(request):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                entered.set()
+                await release.wait()
+            return httpx2.Response(200, json=_http_system_one_payload(model, provider))
+
+        async with VercelSystemOneDecisionClient(
+            model, provider, max_concurrency=1, _transport=httpx2.MockTransport(reply)
+        ) as client:
+            task = asyncio.create_task(client.evaluate("cancel", QUESTIONS))
+            await entered.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            result = await asyncio.wait_for(
+                client.evaluate("next", {"relevant": QUESTIONS["relevant"]}), timeout=1
+            )
+            assert result.usage.retries == 0
+            assert not result.errors
+        assert client._closed
+        assert attempts == 2
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+def test_factory_selects_generic_system_one_client_without_llm_output(monkeypatch, model, provider):
+    from thesis_research.clients import create_decision_client
+
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
+    client = create_decision_client("system_one", model, provider, max_concurrency=1)
+    assert isinstance(client, VercelSystemOneDecisionClient)
+    assert client.requested_model == model
+    assert client.requested_provider == provider
+    asyncio.run(client.aclose())
+
+
+@pytest.mark.parametrize(
+    "backend,provider,mode,reasoning,error",
+    [
+        ("jev", "typesafe-ai", None, None, "backend must be"),
+        ("system_one", "", None, None, "provider"),
+        ("llm", "", "discrete", None, "provider"),
+        ("llm", "openai", None, None, "llm_output_mode"),
+        ("system_one", "typesafe-ai", None, "low", "only valid with the llm"),
+    ],
+)
+def test_factory_rejects_missing_or_retired_settings(backend, provider, mode, reasoning, error):
+    from thesis_research.clients import create_decision_client
+
+    with pytest.raises(ValueError, match=error):
+        create_decision_client(
+            backend,
+            "typesafe-ai/jev",
+            provider,
+            max_concurrency=1,
+            llm_output_mode=mode,
+            reasoning_effort=reasoning,
+        )
+
+
+@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("cost", [None, 0.0])
+def test_system_one_nonretryable_failure_preserves_reported_routing_cost_and_usage(
+    monkeypatch, model, provider, cost
+):
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
+    requests = []
+    payload = {
+        "error": {"message": "Unsupported inputs", "isRetryable": False},
+        "usage": {"input_tokens": 12, "output_tokens": 0},
+        "providerMetadata": {"gateway": {"routing": {"resolvedProvider": provider}}},
+    }
+    if cost is not None:
+        payload["providerMetadata"]["gateway"]["cost"] = cost
+
+    def reply(request):
+        requests.append(request)
+        return httpx2.Response(422, json=payload)
+
+    async def run():
+        async with VercelSystemOneDecisionClient(
+            model, provider, _transport=httpx2.MockTransport(reply)
+        ) as client:
+            return await client.evaluate("A message", QUESTIONS)
+
+    result = asyncio.run(run())
+    assert len(requests) == 1
+    assert not result.answers
+    assert result.errors.keys() == QUESTIONS.keys()
+    assert result.requested_model == model
+    assert result.resolved_models == ()
+    assert result.requested_provider == provider
+    assert result.resolved_providers == (provider,)
+    assert result.usage.input_tokens == 12
+    assert result.usage.output_tokens == 0
+    assert result.usage.cost_usd == cost
+    assert result.usage.retries == 0
+    assert result.calls[0].raw["body"] == payload

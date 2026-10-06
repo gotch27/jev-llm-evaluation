@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-Backend = Literal["jev", "llm"]
+Backend = Literal["system_one", "llm"]
 DatasetSplit = str
 CohortStrategy = Literal["all", "random", "stratified_random"]
 LLMOutputMode = Literal["discrete", "probabilities"]
@@ -18,7 +18,7 @@ class ModelSpec:
     id: str
     backend: Backend
     model: str
-    provider: str | None
+    provider: str
     reasoning_effort: ReasoningEffort | None = None
 
     def as_dict(self) -> dict[str, str | None]:
@@ -81,28 +81,35 @@ class ExecutionSpec:
 
 @dataclass(frozen=True)
 class BenchmarkPlan:
-    """Describe one comparison of Jev with one or more LLMs."""
+    """Describe a shared-cohort run of System One models and/or LLMs."""
 
     name: str
     task_config: Path
     task_config_value: str
+    baseline_model_id: str
     cohort: CohortSpec
-    llm_output: LLMOutputSpec
+    llm_output: LLMOutputSpec | None
     execution: ExecutionSpec
     models: tuple[ModelSpec, ...]
 
     @property
-    def jev(self) -> ModelSpec:
-        """Return the sole Jev model, which is the comparison baseline."""
-        return next(model for model in self.models if model.backend == "jev")
+    def baseline(self) -> ModelSpec:
+        """Return the explicitly selected comparison baseline."""
+        return next(model for model in self.models if model.id == self.baseline_model_id)
+
+    @property
+    def llm_output_mode(self) -> LLMOutputMode | None:
+        """Return the configured LLM mode, if this plan specifies one."""
+        return self.llm_output.mode if self.llm_output is not None else None
 
     def as_dict(self) -> dict[str, object]:
         """Return the complete validated plan in a JSON-safe form."""
         return {
             "name": self.name,
             "task_config": self.task_config_value,
+            "baseline_model_id": self.baseline_model_id,
             "cohort": self.cohort.as_dict(),
-            "llm_output": self.llm_output.as_dict(),
+            "llm_output": self.llm_output.as_dict() if self.llm_output is not None else None,
             "execution": self.execution.as_dict(),
             "models": [model.as_dict() for model in self.models],
         }

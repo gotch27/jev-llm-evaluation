@@ -43,32 +43,34 @@ def load_benchmark_plan(
     value = tomllib.loads(path.read_text(encoding="utf-8"))
     _require_fields(
         value,
-        {"name", "task_config", "cohort", "llm_output", "execution", "models"},
-        {"name", "task_config", "cohort", "llm_output", "execution", "models"},
+        {"name", "task_config", "baseline_model_id", "cohort", "execution", "models"},
+        {"name", "task_config", "baseline_model_id", "cohort", "llm_output", "execution", "models"},
         "Plan",
     )
     task_config_value = _nonempty_string(value["task_config"], "task_config")
     task_config = task_config_override or (path.parent / task_config_value).resolve()
     cohort = _parse_cohort(value["cohort"])
-    llm_output = _parse_llm_output(value["llm_output"])
+    llm_output = _parse_llm_output(value["llm_output"]) if "llm_output" in value else None
     execution = _parse_execution(value["execution"])
     raw_models = value["models"]
     if not isinstance(raw_models, list):
         raise ValueError("models must be an array of tables")
     models = tuple(_parse_model(model, index) for index, model in enumerate(raw_models, 1))
-    if len(models) < 2:
-        raise ValueError("A benchmark requires Jev and at least one LLM")
+    if not models:
+        raise ValueError("A benchmark requires at least one model")
     ids = [model.id for model in models]
     if len(ids) != len(set(ids)):
         raise ValueError("Model IDs must be unique")
-    if sum(model.backend == "jev" for model in models) != 1:
-        raise ValueError("A benchmark requires exactly one Jev model")
-    if not any(model.backend == "llm" for model in models):
-        raise ValueError("A benchmark requires at least one LLM model")
+    baseline_model_id = _nonempty_string(value["baseline_model_id"], "baseline_model_id")
+    if baseline_model_id not in ids:
+        raise ValueError("baseline_model_id must identify a configured model")
+    if any(model.backend == "llm" for model in models) and llm_output is None:
+        raise ValueError("Plans containing LLMs require llm_output")
     return BenchmarkPlan(
         name=_nonempty_string(value["name"], "name"),
         task_config=task_config,
         task_config_value=task_config_value,
+        baseline_model_id=baseline_model_id,
         cohort=cohort,
         llm_output=llm_output,
         execution=execution,
@@ -132,7 +134,7 @@ def _parse_model(value: object, index: int) -> ModelSpec:
         raise ValueError(f"Model {index} must be a table")
     _require_fields(
         value,
-        {"id", "backend", "model"},
+        {"id", "backend", "model", "provider"},
         {"id", "backend", "model", "provider", "reasoning_effort"},
         f"Model {index}",
     )
@@ -140,18 +142,9 @@ def _parse_model(value: object, index: int) -> ModelSpec:
     if _MODEL_ID.fullmatch(model_id) is None:
         raise ValueError(f"Model {index} id must contain lowercase letters, digits, _ or -")
     backend = value["backend"]
-    if backend not in ("jev", "llm"):
-        raise ValueError(f"Model {index} backend must be jev or llm")
-    provider_value = value.get("provider")
-    provider = (
-        _nonempty_string(provider_value, f"Model {index} provider")
-        if provider_value is not None
-        else None
-    )
-    if backend == "jev" and provider is not None:
-        raise ValueError(f"Model {index} cannot set a provider for Jev")
-    if backend == "llm" and provider is None:
-        raise ValueError(f"Model {index} requires a pinned provider")
+    if backend not in ("system_one", "llm"):
+        raise ValueError(f"Model {index} backend must be system_one or llm")
+    provider = _nonempty_string(value["provider"], f"Model {index} provider")
     reasoning_value = value.get("reasoning_effort")
     if reasoning_value is not None and (
         not isinstance(reasoning_value, str) or reasoning_value not in _REASONING_EFFORTS
@@ -159,8 +152,8 @@ def _parse_model(value: object, index: int) -> ModelSpec:
         raise ValueError(
             f"Model {index} reasoning_effort must be one of {sorted(_REASONING_EFFORTS)}"
         )
-    if backend == "jev" and reasoning_value is not None:
-        raise ValueError(f"Model {index} cannot set reasoning_effort for Jev")
+    if backend == "system_one" and reasoning_value is not None:
+        raise ValueError(f"Model {index} cannot set reasoning_effort for System One")
     return ModelSpec(
         id=model_id,
         backend=cast(Backend, backend),

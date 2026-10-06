@@ -26,6 +26,9 @@ def completed_run(tmp_path):
     report = run / "report"
     report.mkdir(parents=True)
     (run / "metadata.json").write_text(json.dumps({"status": "completed"}))
+    # Historical frozen plans are provenance; analysis need not parse their backend syntax.
+    (run / "plan.toml").write_text('name = "historical plan"\nbackend = "jev"\n')
+    (run / "task.toml").write_text('name = "historical task"\n')
     examples = [
         {"id": f"train:{index}", "reference": {"label": label}}
         for index, label in enumerate(("a", "b", "a", "b"), start=1)
@@ -158,3 +161,59 @@ def test_cannot_export_into_original_run(completed_run):
     data = load_benchmark(completed_run)
     with pytest.raises(ValueError, match="outside the source"):
         export_analysis(data, completed_run / "analysis")
+
+
+@pytest.mark.parametrize("single_model", [False, True])
+def test_system_one_names_arbitrary_baseline_and_single_model_exports(
+    completed_run, tmp_path, single_model
+):
+    import matplotlib.pyplot as plt
+
+    from thesis_research.analysis import plot_figures
+
+    report = completed_run / "report"
+    summary_path = report / "summary.json"
+    summary = json.loads(summary_path.read_text())
+    summary["baseline_model_id"] = "liquid-d1"
+    mapping = {"jev": "laya", "llm": "liquid-d1"}
+    summary["models"] = {
+        mapping[key]: value
+        for key, value in summary["models"].items()
+        if not single_model or key == "llm"
+    }
+    summary_path.write_text(json.dumps(summary))
+    for name in ("model_metrics", "model_outcomes", "per_label_metrics"):
+        path = report / f"{name}.jsonl"
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        rows = [row for row in rows if not single_model or row["model_id"] == "llm"]
+        for row in rows:
+            row["model_id"] = mapping[row["model_id"]]
+        write_rows(path, rows)
+    path = report / "pairwise_statistics.jsonl"
+    pairs = [] if single_model else [json.loads(path.read_text())]
+    for pair in pairs:
+        pair["baseline_model_id"] = "liquid-d1"
+        pair["comparison_model_id"] = "laya"
+    write_rows(path, pairs)
+    data = load_benchmark(completed_run)
+    table = pairwise_table(data)
+    assert table.empty == single_model
+    assert "comparison_model_id" in table.columns
+    figures = plot_figures(data)
+    assert ("paired_correctness" in figures) != single_model
+    labels = [
+        tick.get_text() for tick in figures["classification_quality"].axes[0].get_xticklabels()
+    ]
+    assert labels == (["Liquid d1"] if single_model else ["Laya", "Liquid d1"])
+    if not single_model:
+        ax = figures["paired_correctness"].axes[0]
+        assert "Liquid d1" in ax.get_title()
+        assert "Only comparison model correct" in ax.get_legend_handles_labels()[1]
+    for figure in figures.values():
+        plt.close(figure)
+    if single_model:
+        output = tmp_path / "analysis"
+        export_analysis(data, output)
+        assert (output / "paired_comparison.csv").read_text().startswith("question_type,")
+        assert not list(output.rglob("paired_correctness.*"))
+        assert list(output.rglob("classification_quality.png"))

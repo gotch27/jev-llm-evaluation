@@ -105,7 +105,7 @@ class DecisionResult:
 
 
 class DecisionClient(Protocol):
-    """Define the asynchronous interface shared by Jev and LLM clients.
+    """Define the asynchronous interface shared by System One and LLM clients.
 
     Implementations are async context managers so callers can reuse and close
     their underlying HTTP connections reliably.

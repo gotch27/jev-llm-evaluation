@@ -395,7 +395,7 @@ def test_serializes_noul_and_score_predictions(tmp_path):
             discrete_predictions,
             io.StringIO(),
             max_concurrency=1,
-            record_answer_details=False,
+            answer_output_mode="discrete",
         )
     )
     assert json.loads(discrete_predictions.getvalue()) == {
@@ -454,7 +454,7 @@ def test_serializes_noul_and_score_predictions(tmp_path):
             discrete_predictions,
             io.StringIO(),
             max_concurrency=1,
-            record_answer_details=False,
+            answer_output_mode="discrete",
         )
     )
     assert json.loads(discrete_predictions.getvalue()) == {
@@ -705,6 +705,7 @@ def test_boolq_benchmark_generates_noul_reports(tmp_path, tampering):
     plan = tmp_path / "plan.toml"
     plan.write_text(
         f'''name = "BoolQ fixture"
+baseline_model_id = "jev"
 task_config = "{task.name}"
 
 [cohort]
@@ -720,8 +721,9 @@ model_concurrency = 2
 
 [[models]]
 id = "jev"
-backend = "jev"
+backend = "system_one"
 model = "typesafe-ai/jev"
+provider = "typesafe-ai"
 
 [[models]]
 id = "llm"
@@ -772,6 +774,7 @@ provider = "fake"
                 load_benchmark_plan(plan).models,
                 list(prepared.examples),
                 prepared.reference_schema,
+                baseline_model_id="jev",
             )
 
 
@@ -806,6 +809,7 @@ def test_score_benchmark_runs_and_resumes_through_dataset_registry(
     plan = tmp_path / "plan.toml"
     plan.write_text(
         f'''name = "Score fixture"
+baseline_model_id = "jev"
 task_config = "{task.name}"
 
 [cohort]
@@ -823,8 +827,9 @@ model_concurrency = 2
 
 [[models]]
 id = "jev"
-backend = "jev"
+backend = "system_one"
 model = "typesafe-ai/jev"
+provider = "typesafe-ai"
 
 [[models]]
 id = "llm"

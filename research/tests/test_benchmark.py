@@ -252,6 +252,7 @@ def write_plan(
     plan = tmp_path / "benchmark.toml"
     plan.write_text(
         f"""name = "synthetic benchmark"
+baseline_model_id = "jev"
 task_config = {json.dumps(str(TASK_CONFIG))}
 
 [cohort]
@@ -269,8 +270,9 @@ model_concurrency = {model_concurrency}
 
 [[models]]
 id = "jev"
-backend = "jev"
+backend = "system_one"
 model = "typesafe-ai/jev"
+provider = "typesafe-ai"
 
 [[models]]
 id = "llm-a"
@@ -339,7 +341,7 @@ def test_plan_validates_reasoning_effort(tmp_path):
             'model = "typesafe-ai/jev"\nreasoning_effort = "none"',
         )
     )
-    with pytest.raises(ValueError, match="cannot set reasoning_effort for Jev"):
+    with pytest.raises(ValueError, match="cannot set reasoning_effort for System One"):
         load_benchmark_plan(jev)
 
 
@@ -743,3 +745,169 @@ def test_resume_validates_every_model_before_mutation_or_requests(
     assert {
         path.relative_to(run): path.read_bytes() for path in run.rglob("*") if path.is_file()
     } == before
+
+
+MODEL_SETTINGS = {
+    "jev": ("system_one", "typesafe-ai/jev", "typesafe-ai"),
+    "laya": ("system_one", "convaiinnovations/laya", "boundless"),
+    "liquid-d1": ("system_one", "liquid/d1", "liquid"),
+    "llm-a": ("llm", "creator/llm-a", "creator"),
+    "llm-b": ("llm", "creator/llm-b", "creator"),
+}
+
+
+def write_flexible_plan(tmp_path, model_ids, baseline, *, llm_output=None):
+    path = write_plan(tmp_path, example_concurrency=1, model_concurrency=1)
+    header = path.read_text().split("[[models]]", 1)[0]
+    header = header.replace('baseline_model_id = "jev"', f'baseline_model_id = "{baseline}"')
+    header = header.replace('[llm_output]\nmode = "discrete"\n\n', "")
+    if llm_output is not None:
+        header += f'[llm_output]\nmode = "{llm_output}"\n\n'
+    models = []
+    for model_id in model_ids:
+        backend, model, provider = MODEL_SETTINGS[model_id]
+        models.append(
+            f'[[models]]\nid = "{model_id}"\nbackend = "{backend}"\n'
+            f'model = "{model}"\nprovider = "{provider}"\n'
+        )
+    if not models:
+        header = header.replace("[cohort]", "models = []\n\n[cohort]")
+    path.write_text(header + "\n".join(models))
+    return path
+
+
+@pytest.mark.parametrize(
+    "model_ids,baseline,llm_output",
+    [
+        (("laya",), "laya", None),
+        (("llm-a",), "llm-a", "discrete"),
+        (("jev", "laya", "liquid-d1"), "laya", None),
+        (("laya", "liquid-d1"), "liquid-d1", "discrete"),
+        (("llm-a", "llm-b"), "llm-b", "probabilities"),
+        (("laya", "llm-a", "jev"), "llm-a", "discrete"),
+    ],
+)
+def test_flexible_benchmarks_share_all_options_and_use_explicit_baseline(
+    benchmark_dataset, tmp_path, model_ids, baseline, llm_output
+):
+    data, labels = benchmark_dataset
+    path = write_flexible_plan(tmp_path, model_ids, baseline, llm_output=llm_output)
+    plan = load_benchmark_plan(path)
+    assert plan.baseline.id == baseline
+    assert plan.as_dict()["baseline_model_id"] == baseline
+    assert plan.llm_output_mode == llm_output
+    clients = {
+        model_id: FakeDecisionClient(
+            labels, model_id=model_id, wrong_indexes={0} if model_id == baseline else ()
+        )
+        for model_id in model_ids
+    }
+    run = asyncio.run(run_benchmark(path, data, tmp_path / "outputs", _clients=clients))
+    summary = json.loads((run / "report/summary.json").read_text())
+    assert summary["baseline_model_id"] == baseline
+    pairs = read_jsonl(run / "report/pairwise_statistics.jsonl")
+    assert [row["comparison_model_id"] for row in pairs] == [
+        model_id for model_id in model_ids if model_id != baseline
+    ]
+    assert all(row["baseline_model_id"] == baseline for row in pairs)
+    assert all(row["baseline_only_correct"] == 0 for row in pairs)
+    assert all(row["comparison_only_correct"] == 1 for row in pairs)
+    assert all(row["accuracy_difference"] == pytest.approx(1 / 77) for row in pairs)
+    expected_calls = clients[model_ids[0]].calls
+    for model_id, client in clients.items():
+        assert client.calls == expected_calls
+        assert len(client.calls) == 77
+        assert all(len(questions["intent"].criteria) == 77 for _, questions in client.calls)
+        mode = "native_probabilities" if MODEL_SETTINGS[model_id][0] == "system_one" else llm_output
+        metadata = json.loads((run / "models" / model_id / "metadata.json").read_text())
+        assert metadata["output_mode"] == mode
+        decisions = read_jsonl(run / "models" / model_id / "decisions.jsonl")
+        assert all(row["decision"]["answer_output_mode"] == mode for row in decisions)
+
+
+@pytest.mark.parametrize(
+    "model_ids,baseline,llm_output,error",
+    [
+        ((), "laya", None, "at least one model"),
+        (("laya",), "unknown", None, "identify a configured model"),
+        (("laya", "laya"), "laya", None, "unique"),
+        (("llm-a",), "llm-a", None, "require llm_output"),
+        (("laya", "llm-a"), "laya", None, "require llm_output"),
+    ],
+)
+def test_flexible_plan_rejects_invalid_model_selection(
+    tmp_path, model_ids, baseline, llm_output, error
+):
+    path = write_flexible_plan(tmp_path, model_ids, baseline, llm_output=llm_output)
+    with pytest.raises(ValueError, match=error):
+        load_benchmark_plan(path)
+
+
+@pytest.mark.parametrize(
+    "old,new,error",
+    [
+        ('baseline_model_id = "laya"\n', "", "baseline_model_id"),
+        ('provider = "boundless"\n', "", "provider"),
+        ('provider = "boundless"', 'provider = " "', "nonempty"),
+        ('backend = "system_one"', 'backend = "jev"', "system_one or llm"),
+    ],
+)
+def test_flexible_plan_requires_explicit_baseline_provider_and_current_backend(
+    tmp_path, old, new, error
+):
+    path = write_flexible_plan(tmp_path, ("laya",), "laya")
+    path.write_text(path.read_text().replace(old, new))
+    with pytest.raises(ValueError, match=error):
+        load_benchmark_plan(path)
+
+
+@pytest.mark.parametrize("model_id", ["laya", "liquid-d1", "llm-a"])
+def test_single_model_run_resumes_without_repeating_completed_examples(
+    benchmark_dataset, tmp_path, model_id
+):
+    data, labels = benchmark_dataset
+    mode = "discrete" if model_id == "llm-a" else None
+    path = write_flexible_plan(tmp_path, (model_id,), model_id, llm_output=mode)
+    initial = FakeDecisionClient(labels, model_id=model_id, raise_at=2)
+    outputs = tmp_path / "outputs"
+    with pytest.raises(ValueError, match="preserved record"):
+        asyncio.run(run_benchmark(path, data, outputs, _clients={model_id: initial}))
+    run = next(outputs.iterdir())
+    predictions = run / "models" / model_id / "predictions.jsonl"
+    completed = predictions.read_bytes()
+    assert len(read_jsonl(predictions)) == 2
+    resumed = FakeDecisionClient(labels, model_id=model_id)
+    asyncio.run(resume_benchmark(run, data, _clients={model_id: resumed}))
+    assert len(resumed.calls) == 75
+    assert predictions.read_bytes().startswith(completed)
+    assert len(read_jsonl(predictions)) == 77
+    assert (run / "report/pairwise_statistics.jsonl").read_bytes() == b""
+    assert asyncio.run(resume_benchmark(run, data)) == run
+
+
+def test_system_one_training_smokes_match_routes_and_preserve_banking77_variants():
+    criteria = load_benchmark_plan(BENCHMARKS_DIRECTORY / "banking77-system-one-smoke.toml")
+    without = load_benchmark_plan(
+        BENCHMARKS_DIRECTORY / "banking77-without-criteria-system-one-smoke.toml"
+    )
+    boolq_path = (
+        TASK_CONFIG.parents[2] / "boolean_question_answering/benchmarks/boolq-system-one-smoke.toml"
+    )
+    boolq = load_benchmark_plan(boolq_path)
+    assert criteria.cohort == without.cohort
+    assert criteria.models == without.models == boolq.models
+    for plan in (criteria, without, boolq):
+        assert plan.cohort.split == "train"
+        assert plan.baseline.id == "jev"
+        assert plan.llm_output is None
+        assert all(model.backend == "system_one" for model in plan.models)
+        assert [(model.model, model.provider) for model in plan.models] == [
+            ("typesafe-ai/jev", "typesafe-ai"),
+            ("convaiinnovations/laya", "boundless"),
+            ("liquid/d1", "liquid"),
+        ]
+    assert criteria.cohort.size == without.cohort.size == 1
+    assert boolq.cohort.size == 2
+    assert boolq.cohort.strategy == "stratified_random"
+    for plan in (criteria, without):
+        assert len(load_task_config(plan.task_config).question.options) == 77

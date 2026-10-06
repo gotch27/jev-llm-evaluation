@@ -21,12 +21,16 @@ from thesis_research.run_storage import file_checksum, git_state, write_json
 
 MODEL_NAMES = {
     "jev": "Jev",
+    "laya": "Laya",
+    "liquid-d1": "Liquid d1",
     "gpt-5-6-luna": "GPT-5.6 Luna",
     "gemini-2-5-flash-lite": "Gemini 2.5 Flash Lite",
     "qwen3-5-flash": "Qwen 3.5 Flash",
 }
 MODEL_COLORS = {
     "jev": "#0072B2",
+    "laya": "#56B4E9",
+    "liquid-d1": "#E69F00",
     "gpt-5-6-luna": "#D55E00",
     "gemini-2-5-flash-lite": "#009E73",
     "qwen3-5-flash": "#CC79A7",
@@ -36,6 +40,23 @@ REPORT_TABLES = (
     "per_label_metrics",
     "pairwise_statistics",
     "model_outcomes",
+)
+_PAIRWISE_COLUMNS = (
+    "question_type",
+    "baseline_model_id",
+    "comparison_model_id",
+    "total",
+    "both_correct",
+    "baseline_only_correct",
+    "comparison_only_correct",
+    "neither_correct",
+    "baseline_accuracy",
+    "comparison_accuracy",
+    "accuracy_difference",
+    "both_valid",
+    "valid_label_agreement",
+    "valid_label_agreement_rate",
+    "mcnemar_exact_two_sided_p_value",
 )
 
 
@@ -88,6 +109,8 @@ def load_benchmark(run: Path) -> BenchmarkAnalysis:
         )
         for name in REPORT_TABLES
     ]
+    if tables[2].empty:
+        tables[2] = pd.DataFrame(columns=_PAIRWISE_COLUMNS)
     data = BenchmarkAnalysis(run, metadata, cohort, summary, *tables)
     _validate_cohort(data)
     return data
@@ -287,32 +310,33 @@ def plot_figures(data: BenchmarkAnalysis) -> dict[str, Figure]:
         fig.colorbar(image, ax=ax, shrink=0.5, label="F1")
         figures["intent_f1"] = fig
 
-        pairs = data.pairs.set_index("comparison_model_id")
-        pair_names = [MODEL_NAMES.get(model, model) for model in pairs.index]
-        baseline = MODEL_NAMES.get(
-            data.summary["baseline_model_id"], data.summary["baseline_model_id"]
-        )
-        fig, ax = plt.subplots(figsize=(9, 5), layout="constrained")
-        left = np.zeros(len(pairs))
-        for field, label, color in (
-            ("both_correct", "Both correct", "#009E73"),
-            ("baseline_only_correct", f"Only {baseline} correct", "#0072B2"),
-            ("comparison_only_correct", "Only LLM correct", "#E69F00"),
-            ("neither_correct", "Neither correct", "#999999"),
-        ):
-            values = pairs[field].to_numpy()
-            bars = ax.barh(pair_names, values, left=left, label=label, color=color)
-            ax.bar_label(
-                bars,
-                labels=[str(value) if value else "" for value in values],
-                label_type="center",
-                fontsize=9,
+        if not data.pairs.empty:
+            pairs = data.pairs.set_index("comparison_model_id")
+            pair_names = [MODEL_NAMES.get(model, model) for model in pairs.index]
+            baseline = MODEL_NAMES.get(
+                data.summary["baseline_model_id"], data.summary["baseline_model_id"]
             )
-            left += values
-        ax.set(xlabel="Examples", title=f"Paired correctness with {baseline}\n{data.caption}")
-        ax.invert_yaxis()
-        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncols=2)
-        figures["paired_correctness"] = fig
+            fig, ax = plt.subplots(figsize=(9, 5), layout="constrained")
+            left = np.zeros(len(pairs))
+            for field, label, color in (
+                ("both_correct", "Both correct", "#009E73"),
+                ("baseline_only_correct", f"Only {baseline} correct", "#0072B2"),
+                ("comparison_only_correct", "Only comparison model correct", "#E69F00"),
+                ("neither_correct", "Neither correct", "#999999"),
+            ):
+                values = pairs[field].to_numpy()
+                bars = ax.barh(pair_names, values, left=left, label=label, color=color)
+                ax.bar_label(
+                    bars,
+                    labels=[str(value) if value else "" for value in values],
+                    label_type="center",
+                    fontsize=9,
+                )
+                left += values
+            ax.set(xlabel="Examples", title=f"Paired correctness with {baseline}\n{data.caption}")
+            ax.invert_yaxis()
+            ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncols=2)
+            figures["paired_correctness"] = fig
     return figures
 
 

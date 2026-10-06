@@ -1,1 +1,1 @@
-"""Reusable components for reproducible Jev and LLM thesis experiments."""
+"""Reusable components for reproducible System One and LLM thesis experiments."""

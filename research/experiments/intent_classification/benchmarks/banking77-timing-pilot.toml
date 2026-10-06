@@ -1,6 +1,7 @@
 # Training-only check of timing records; ten rows do not estimate tail latency reliably.
 # Models and examples run sequentially, with no extra warm-up calls.
 name = "BANKING77 timing pilot"
+baseline_model_id = "jev"
 task_config = "../tasks/banking77.toml"
 
 [cohort]
@@ -18,8 +19,9 @@ model_concurrency = 1
 
 [[models]]
 id = "jev"
-backend = "jev"
+backend = "system_one"
 model = "typesafe-ai/jev"
+provider = "typesafe-ai"
 
 [[models]]
 id = "gpt-5-6-luna"

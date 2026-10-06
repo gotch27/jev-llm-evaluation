@@ -8,7 +8,7 @@ import math
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Any, TextIO
+from typing import Any, Literal, TextIO
 
 from typesafe_sdk import ChoiceAnswer, NoulAnswer, ScoreAnswer
 
@@ -22,6 +22,8 @@ from thesis_research.datasets import (
 )
 from thesis_research.evaluation import prediction_status
 from thesis_research.tasks import StructuredTask
+
+AnswerOutputMode = Literal["discrete", "probabilities", "native_probabilities"]
 
 _USAGE_FIELDS = (
     "input_tokens",
@@ -88,11 +90,13 @@ async def predict_examples(
     decisions_file: TextIO,
     *,
     max_concurrency: int,
-    record_answer_details: bool = True,
+    answer_output_mode: AnswerOutputMode = "probabilities",
     on_progress: Callable[[dict[str, Any]], None] | None = None,
     on_prediction: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Validate states, evaluate bounded batches, and stream ordered records."""
+    _validate_output_mode(answer_output_mode)
+    record_answer_details = answer_output_mode != "discrete"
     if max_concurrency < 1:
         raise ValueError("max_concurrency must be at least 1")
     task.validate_state_fields(examples)
@@ -128,8 +132,7 @@ async def predict_examples(
                     "state": state,
                     "prediction": prediction,
                     "decision": decision_result_to_dict(
-                        result,
-                        record_answer_details=record_answer_details,
+                        result, answer_output_mode=answer_output_mode
                     ),
                 },
             )
@@ -149,16 +152,17 @@ async def predict_examples(
 def decision_result_to_dict(
     result: DecisionResult,
     *,
-    record_answer_details: bool = True,
+    answer_output_mode: AnswerOutputMode = "probabilities",
 ) -> dict[str, Any]:
     """Convert a provider-neutral decision result into a JSON-safe record."""
-    mode = "probabilities" if record_answer_details else "discrete"
+    _validate_output_mode(answer_output_mode)
+    record_answer_details = answer_output_mode != "discrete"
     return {
         "answers": {
             question_id: _answer_to_dict(answer, record_answer_details)
             for question_id, answer in result.answers.items()
         },
-        "answer_output_mode": mode,
+        "answer_output_mode": answer_output_mode,
         "errors": {
             question_id: _error_to_dict(error) for question_id, error in result.errors.items()
         },
@@ -183,6 +187,13 @@ def decision_result_to_dict(
             for call in result.calls
         ],
     }
+
+
+def _validate_output_mode(mode: str) -> None:
+    if mode not in ("discrete", "probabilities", "native_probabilities"):
+        raise ValueError(
+            "answer_output_mode must be discrete, probabilities, or native_probabilities"
+        )
 
 
 def _prediction_record(

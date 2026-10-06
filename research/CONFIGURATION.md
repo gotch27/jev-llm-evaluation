@@ -5,7 +5,7 @@ The project separates the supervised task from the benchmark execution:
 - A **task TOML** pins a registered dataset revision, maps dataset fields into model state, and
   defines one TypeSafe `Choice`, `Noul`, or `Score` question.
 - A **benchmark TOML** selects a dataset split and cohort, the LLM answer mode, concurrency, and
-  the Jev and LLM models that receive that same cohort.
+  the System One models and LLMs that receive that same cohort.
 
 Both files and the selected cohort are copied into every benchmark run. API keys belong only in
 `research/.env`; the CLI reads `AI_GATEWAY_API_KEY` from there.
@@ -27,7 +27,7 @@ model_state_key = "dataset_source_field"
 [question]
 type = "choice" # or "noul" or "score"
 id = "stable_answer_key"
-instructions = "Instructions shared by Jev and every LLM."
+instructions = "Instructions shared by every configured model."
 ```
 
 `dataset.id` selects a Python adapter in `src/thesis_research/datasets/registry.py`.
@@ -131,6 +131,7 @@ versioned real Score dataset task yet.
 
 ```toml
 name = "BoolQ Noul smoke benchmark"
+baseline_model_id = "jev"
 task_config = "../tasks/boolq.toml"
 
 [cohort]
@@ -148,8 +149,9 @@ model_concurrency = 4
 
 [[models]]
 id = "jev"
-backend = "jev"
+backend = "system_one"
 model = "typesafe-ai/jev"
+provider = "typesafe-ai"
 
 [[models]]
 id = "example-llm"
@@ -159,8 +161,10 @@ provider = "provider-slug"
 reasoning_effort = "low"
 ```
 
-Every field is required, and unknown fields are rejected. `task_config` is resolved relative to
-the benchmark file. A plan requires exactly one Jev model and at least one LLM.
+Unknown fields are rejected. `task_config` is resolved relative to the benchmark file.
+A plan requires one or more models and a `baseline_model_id` naming one of them. There is no
+required backend category. Single-model runs use that sole model as baseline and have no pairwise
+comparisons. `[llm_output]` is optional for System One-only plans and required if any LLM is included.
 
 ### Cohort
 
@@ -188,7 +192,8 @@ it is reused unchanged by all models and by resumed attempts.
   saves its distribution and confidence, Noul saves `P(true)`, and Score saves its level
   distribution and confidence.
 
-This setting controls LLM serialization. Jev keeps its native structured answer details. For
+This setting controls LLM serialization. System One always records `native_probabilities` and
+keeps its native structured answer details independently of `[llm_output]`. For
 Noul, the saved boolean is true when `P(true) >= 0.5`. For Score, the saved discrete level is the
 largest-probability level, with the lowest level chosen on a tie; the expected score supplied by
 TypeSafe is saved separately.
@@ -204,13 +209,16 @@ Each model table accepts:
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `id` | yes | Unique lowercase local identifier used in paths and reports. |
-| `backend` | yes | `jev` or `llm`. |
+| `backend` | yes | `system_one` or `llm`. |
 | `model` | yes | Canonical Vercel model ID. |
-| `provider` | LLM only | Pinned upstream provider slug. |
+| `provider` | yes | Pinned upstream provider slug. |
 | `reasoning_effort` | optional, LLM only | `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`. |
 
-Jev must omit `provider` and `reasoning_effort`. LLMs require a provider and native structured
-output support. Virtual aliases and provider fallback lists are rejected.
+System One models must omit `reasoning_effort`. The routes are Jev (`typesafe-ai/jev`, provider
+`typesafe-ai`), Laya (`convaiinnovations/laya`, provider `boundless`), and Liquid d1 (`liquid/d1`,
+provider `liquid`). Use Laya's standard ID. All models pin their provider with `gateway.only`.
+LLMs require native structured output support; virtual aliases and provider fallback lists are
+rejected. Historical frozen `jev` plans require their original code revision for resume.
 
 ## Prediction records and metrics
 

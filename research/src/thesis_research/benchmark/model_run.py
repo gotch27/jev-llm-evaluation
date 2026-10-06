@@ -36,7 +36,7 @@ async def run_model(
     task: StructuredTask,
     *,
     example_concurrency: int,
-    llm_output_mode: str,
+    llm_output_mode: str | None,
     client: DecisionClient | None = None,
     observer: BenchmarkObserver | None = None,
 ) -> dict[str, Any]:
@@ -49,7 +49,9 @@ async def run_model(
     observer = observer if observer is not None else NullBenchmarkObserver()
     directory.mkdir(parents=True, exist_ok=True)
     metadata_path = directory / "metadata.json"
-    recorded_output_mode = "native_probabilities" if spec.backend == "jev" else llm_output_mode
+    recorded_output_mode = (
+        "native_probabilities" if spec.backend == "system_one" else llm_output_mode
+    )
     metadata = load_or_create_model_metadata(
         metadata_path,
         spec,
@@ -117,7 +119,7 @@ async def run_model(
                         output,
                         diagnostics,
                         max_concurrency=example_concurrency,
-                        record_answer_details=recorded_output_mode != "discrete",
+                        answer_output_mode=recorded_output_mode,
                         on_progress=record_progress,
                         on_prediction=record_prediction,
                     )

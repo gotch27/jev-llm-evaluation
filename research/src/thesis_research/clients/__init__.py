@@ -8,7 +8,7 @@ from thesis_research.clients.contracts import (
     UsageTotals,
 )
 from thesis_research.clients.factory import create_decision_client
-from thesis_research.clients.jev import JevDecisionClient
+from thesis_research.clients.system_one import VercelSystemOneDecisionClient
 from thesis_research.clients.vercel_llm import VercelLLMDecisionClient
 
 __all__ = [
@@ -16,7 +16,7 @@ __all__ = [
     "DecisionClient",
     "DecisionError",
     "DecisionResult",
-    "JevDecisionClient",
+    "VercelSystemOneDecisionClient",
     "VercelLLMDecisionClient",
     "UsageTotals",
     "create_decision_client",

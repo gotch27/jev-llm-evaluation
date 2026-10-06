@@ -47,7 +47,7 @@ async def run_benchmark(
     runner_location: str | None = None,
     _clients: dict[str, DecisionClient] | None = None,
 ) -> Path:
-    """Create and execute one Jev-to-LLM benchmark.
+    """Create and execute one shared-cohort benchmark.
 
     The plan and task are validated before a run directory is created. After
     that point, every failure is recorded inside the unique benchmark
@@ -180,7 +180,9 @@ async def resume_benchmark(
         model_metadata = {}
         if model_metadata_path.exists():
             model_metadata = json.loads(model_metadata_path.read_text(encoding="utf-8"))
-            output_mode = "native_probabilities" if model.backend == "jev" else plan.llm_output.mode
+            output_mode = (
+                "native_probabilities" if model.backend == "system_one" else plan.llm_output_mode
+            )
             validate_model_metadata(
                 model_metadata, model, plan.execution.example_concurrency, output_mode
             )
@@ -271,7 +273,7 @@ async def _execute(
                     schema,
                     task,
                     example_concurrency=plan.execution.example_concurrency,
-                    llm_output_mode=plan.llm_output.mode,
+                    llm_output_mode=plan.llm_output_mode,
                     client=clients.get(model.id) if clients is not None else None,
                     observer=observer,
                 )
@@ -295,7 +297,9 @@ async def _execute(
             attempt["model_errors"] = failures
             raise ValueError(f"Model runs failed: {failures}")
         observer.report_started()
-        generate_report(run, plan.models, examples, schema)
+        generate_report(
+            run, plan.models, examples, schema, baseline_model_id=plan.baseline_model_id
+        )
         metadata["report_artifacts"] = report_artifacts(run)
         metadata["status"] = "completed"
         attempt["status"] = "completed"

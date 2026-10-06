@@ -1,27 +1,27 @@
 """Construction of configured decision clients."""
 
 from thesis_research.clients.contracts import DecisionClient
-from thesis_research.clients.jev import JevDecisionClient
+from thesis_research.clients.system_one import VercelSystemOneDecisionClient
 from thesis_research.clients.vercel_llm import VercelLLMDecisionClient
 
 
 def create_decision_client(
     backend: str,
     model: str,
-    provider: str | None,
+    provider: str,
     *,
     max_concurrency: int,
-    llm_output_mode: str = "probabilities",
+    llm_output_mode: str | None = None,
     reasoning_effort: str | None = None,
 ) -> DecisionClient:
     """Create a decision client for one configured model backend.
 
     Args:
-        backend: Backend name, either ``"jev"`` or ``"llm"``.
+        backend: Backend name, either ``"system_one"`` or ``"llm"``.
         model: Provider model identifier.
-        provider: Pinned Vercel AI Gateway provider, or ``None`` for Jev.
+        provider: Pinned Vercel AI Gateway provider.
         max_concurrency: Shared upper bound on active provider requests.
-        llm_output_mode: LLM answer format; ignored by the Jev backend.
+        llm_output_mode: Explicit LLM answer format; ignored by System One.
         reasoning_effort: Explicit Vercel reasoning effort for an LLM, or
             ``None`` to leave the setting unspecified.
 
@@ -32,15 +32,15 @@ def create_decision_client(
         ValueError: If the backend or its provider setting is invalid, or a
             required API key is absent.
     """
-    if backend == "jev":
-        if provider is not None:
-            raise ValueError("--provider is only valid with the llm backend")
+    if not isinstance(provider, str) or not provider.strip():
+        raise ValueError("provider must be a nonempty pinned provider")
+    if backend == "system_one":
         if reasoning_effort is not None:
             raise ValueError("reasoning_effort is only valid with the llm backend")
-        return JevDecisionClient(model, max_concurrency=max_concurrency)
+        return VercelSystemOneDecisionClient(model, provider, max_concurrency=max_concurrency)
     if backend == "llm":
-        if provider is None or not provider.strip():
-            raise ValueError("--provider is required with the llm backend")
+        if llm_output_mode not in ("discrete", "probabilities"):
+            raise ValueError("llm_output_mode must be discrete or probabilities for LLMs")
         return VercelLLMDecisionClient(
             model,
             provider,
@@ -48,4 +48,4 @@ def create_decision_client(
             reasoning_effort=reasoning_effort,
             max_concurrency=max_concurrency,
         )
-    raise ValueError("backend must be jev or llm")
+    raise ValueError("backend must be system_one or llm")

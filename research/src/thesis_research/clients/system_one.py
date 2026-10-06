@@ -1,4 +1,4 @@
-"""Jev implementation of the shared structured-decision interface."""
+"""System One implementation of the shared structured-decision interface."""
 
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ from thesis_research.clients.contracts import (
 from thesis_research.clients.gateway_metadata import reported_cost, resolved_provider
 
 VERCEL_TYPESAFE_BASE_URL = "https://ai-gateway.vercel.sh/typesafe"
-VERCEL_JEV_PROVIDER = "typesafe-ai"
 
 
 @dataclass
@@ -35,16 +34,16 @@ class _RequestAttempts:
     count: int = 0
 
 
-class JevDecisionClient(DecisionClient):
-    """Evaluate structured questions through Jev's System One endpoint.
+class VercelSystemOneDecisionClient(DecisionClient):
+    """Evaluate structured questions through Vercel's System One endpoint.
 
-    All questions for one state are sent in a single Jev request because Jev
-    evaluates them independently. A semaphore bounds concurrent requests when
-    the same client is shared across dataset examples.
+    All questions for one state are sent in a single System One request. A semaphore
+    bounds concurrent requests when the same client is shared across dataset examples.
 
     Args:
-        model: Vercel's Jev model identifier, currently ``typesafe-ai/jev``.
-        max_concurrency: Maximum active Jev requests for this client.
+        model: Canonical Vercel System One model identifier.
+        provider: Upstream provider slug that must serve every request.
+        max_concurrency: Maximum active System One requests for this client.
         timeout_seconds: HTTP timeout applied to each request.
         retry: Optional TypeSafe transient retry policy.
         _client: Optional SDK client injected by offline tests.
@@ -57,6 +56,7 @@ class JevDecisionClient(DecisionClient):
     def __init__(
         self,
         model: str,
+        provider: str,
         *,
         max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
@@ -66,6 +66,8 @@ class JevDecisionClient(DecisionClient):
     ) -> None:
         if not model.strip():
             raise ValueError("model must be nonempty")
+        if not provider.strip():
+            raise ValueError("provider must be nonempty")
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be at least 1")
         if timeout_seconds <= 0:
@@ -74,7 +76,7 @@ class JevDecisionClient(DecisionClient):
             raise ValueError("Supply only one of _client or _transport")
         retry = retry or RetryPolicy()
         self._attempts: ContextVar[_RequestAttempts | None] = ContextVar(
-            "jev_request_attempts", default=None
+            "system_one_request_attempts", default=None
         )
         self._tracks_attempts = _client is None
         if _client is None:
@@ -95,7 +97,7 @@ class JevDecisionClient(DecisionClient):
             )
         self.requested_model = model
         # Pin and record the requested route; resolved routing comes from the response.
-        self.requested_provider = VERCEL_JEV_PROVIDER
+        self.requested_provider = provider
         # This policy controls retries. Actual retry counts are measured per evaluation.
         self._retry = retry
         self._timeout_seconds = timeout_seconds
@@ -104,7 +106,7 @@ class JevDecisionClient(DecisionClient):
         self._closed = False
 
     async def evaluate(self, state: JSONContent, questions: Questions) -> DecisionResult:
-        """Evaluate all supplied questions in one bounded Jev request.
+        """Evaluate all supplied questions in one bounded System One request.
 
         Provider failures become per-question errors in the returned result so
         prediction runs can preserve the failed example and continue.
@@ -121,7 +123,7 @@ class JevDecisionClient(DecisionClient):
             ValueError: If no questions are supplied.
         """
         if self._closed:
-            raise RuntimeError("The Jev client is closed")
+            raise RuntimeError("The System One client is closed")
         if not questions:
             raise ValueError("At least one question is required")
         started = time.perf_counter()
@@ -138,24 +140,27 @@ class JevDecisionClient(DecisionClient):
                     timeout=self._timeout_seconds,
                     extra_body={
                         "providerOptions": {
-                            "gateway": {"only": [VERCEL_JEV_PROVIDER]},
+                            "gateway": {"only": [self.requested_provider]},
                         }
                     },
                 )
             except TypeSafeError as error:
                 latency = time.perf_counter() - call_started
                 decision_error = _decision_error(error)
+                body = getattr(error, "body", None)
+                raw_error = body if isinstance(body, dict) else {}
+                reported_model = raw_error.get("model")
                 call = CallRecord(
                     question_ids=tuple(questions),
                     requested_model=self.requested_model,
-                    resolved_model=None,
+                    resolved_model=reported_model if isinstance(reported_model, str) else None,
                     requested_provider=self.requested_provider,
-                    resolved_provider=None,
+                    resolved_provider=resolved_provider(raw_error),
                     latency_seconds=latency,
                     usage=UsageTotals(
-                        None,
-                        None,
-                        None,
+                        _reported_tokens(raw_error, "input_tokens"),
+                        _reported_tokens(raw_error, "output_tokens"),
+                        reported_cost(raw_error),
                         max(0, attempts.count - 1) if self._tracks_attempts else None,
                         0,
                     ),
@@ -214,7 +219,7 @@ class JevDecisionClient(DecisionClient):
 
     async def __aenter__(self) -> Self:
         if self._closed:
-            raise RuntimeError("The Jev client is closed")
+            raise RuntimeError("The System One client is closed")
         return self
 
     async def __aexit__(
@@ -249,8 +254,15 @@ def _response_retries(response: httpx2.Response) -> int | None:
     return count if count >= 0 else None
 
 
+def _reported_tokens(raw: dict[str, Any], name: str) -> int | None:
+    """Retain valid token counts if a failed HTTP response reports usage."""
+    usage = raw.get("usage")
+    value = usage.get(name) if isinstance(usage, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
 def _result(
-    client: JevDecisionClient,
+    client: VercelSystemOneDecisionClient,
     answers: dict,
     errors: dict,
     calls: list[CallRecord],

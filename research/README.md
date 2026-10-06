@@ -1,8 +1,8 @@
 # Research code
 
 Python components for the thesis experiments. The project prepares pinned labeled datasets,
-builds one shared TypeSafe `Choice`, `Noul`, or `Score` question per task, calls Jev and LLMs
-through Vercel AI Gateway, and runs coordinated benchmarks in which every model receives the same
+builds one shared TypeSafe `Choice`, `Noul`, or `Score` question per task, calls System One models
+and LLMs through Vercel AI Gateway, and runs coordinated benchmarks in which every model receives the same
 frozen cohort. Reports are saved as machine-readable tables for later statistical analysis and
 visualization. BANKING77 is the Choice task and BoolQ is the first Noul task.
 
@@ -33,19 +33,19 @@ dependency versions.
 ## Structured model clients
 
 Both clients accept the same state and TypeSafe `Choice`, `Score`, and `Noul` questions and
-return a `DecisionResult`. Jev receives the complete question set in one request. An LLM receives
-one isolated request per question; those requests run concurrently with at most five active by
+return a `DecisionResult`. A System One model receives the complete question set in one request.
+An LLM receives one isolated request per question; those requests run concurrently with at most five active by
 default. BANKING77 has one Choice question with 77 options, so this distinction does
 not create extra requests.
 
-Both paths use `AI_GATEWAY_API_KEY`. Jev uses Vercel's TypeSafe-compatible endpoint while keeping
-the TypeSafe Python SDK and its native state-and-questions interface:
+Both paths use `AI_GATEWAY_API_KEY`. System One uses Vercel's TypeSafe-compatible endpoint
+while keeping the TypeSafe Python SDK and its native state-and-questions interface:
 
 ```python
 import asyncio
 
 from dotenv import load_dotenv
-from thesis_research.clients import JevDecisionClient
+from thesis_research.clients import VercelSystemOneDecisionClient
 from typesafe_sdk import Choice
 
 
@@ -56,7 +56,7 @@ async def main() -> None:
             criteria={"card_arrival": None, "change_pin": None},
         )
     }
-    async with JevDecisionClient("typesafe-ai/jev") as client:
+    async with VercelSystemOneDecisionClient("typesafe-ai/jev", "typesafe-ai") as client:
         result = await client.evaluate("When will my card arrive?", questions)
         print(result.answers["intent"])
 
@@ -64,6 +64,19 @@ async def main() -> None:
 load_dotenv()
 asyncio.run(main())
 ```
+
+The same client supports these routes, with the configured provider pinned using `gateway.only`:
+
+| Model | Gateway model ID | Provider |
+| --- | --- | --- |
+| Jev | `typesafe-ai/jev` | `typesafe-ai` |
+| Laya | `convaiinnovations/laya` | `boundless` |
+| Liquid d1 | `liquid/d1` | `liquid` |
+
+These routes use [Vercel's compatible TypeSafe endpoint](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe)
+and [System One model routing](https://vercel.com/i/jev-vs-laya-vs-liquid-d1). Use Laya's standard
+ID; pricing is taken from actual responses rather than promotional assumptions. Native Choice,
+Noul, and Score answers and the full raw response are preserved.
 
 For an LLM, supply a canonical Vercel model ID and pin one upstream provider. Virtual models and
 routing aliases are rejected. Prefer a versioned model ID when Vercel offers one. The selected
@@ -105,7 +118,8 @@ LLMs always use native structured output. `output_mode="discrete"` requires only
 decision needed by the task and does not invent confidence data. `output_mode="probabilities"`
 also requests the question-specific distribution. Invalid probability sums are normalized while
 the original values and normalization error remain in raw diagnostics. These are the only two
-output modes. Benchmark plans require an explicit mode shared by all configured LLMs. Jev retains
+output modes. Benchmark plans containing LLMs require an explicit mode shared by those LLMs.
+System One retains
 its native answer details.
 
 LLM requests pin the upstream provider with Vercel's `only` option and omit the optional
@@ -115,13 +129,14 @@ metadata returned by the gateway, without authentication headers.
 `DecisionResult` provides typed `answers`, per-question `errors`, requested and resolved model and
 provider identifiers, aggregate token/cost/retry usage, total wall-clock latency, and individual
 call records. If any call has unknown usage or cost, that aggregate is `None` rather than an
-incomplete total. Jev requests are billed through AI Gateway. The client preserves the full HTTP
+incomplete total. System One requests are billed through AI Gateway. The client preserves the full HTTP
 response body because the TypeSafe SDK's typed response drops gateway extensions. Reported cost
 comes from `provider_metadata.gateway.cost`; routing and generation IDs remain in the raw record.
 Missing cost stays `None`, while an explicitly reported zero remains zero. See
 [Vercel's TypeSafe API response](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe).
-Jev HTTP attempts are counted separately for each evaluation, including exhausted retries and
-connection failures. A retry count of zero means the initial attempt was sufficient; `None` means
+System One HTTP attempts are counted separately for each evaluation, including exhausted retries and
+connection failures. Failed responses also retain reported routing, usage, and cost when present.
+A retry count of zero means the initial attempt was sufficient; `None` means
 the count could not be observed, such as a failure from an externally injected client.
 
 Both clients use the same explicit transient retry policy: two retries with bounded backoff,
@@ -222,7 +237,7 @@ forms, state mappings, criteria, prediction records, and metrics.
 
 ## BANKING77 Choice definition
 
-The task directory contains two provider-neutral variants shared by Jev and every LLM:
+The task directory contains two provider-neutral variants shared by every configured model:
 
 - `banking77.toml` gives every label a concise `use_when` definition and a `distinguish_from`
   boundary. These criteria were derived only from training examples and contain no example
@@ -261,7 +276,7 @@ boundaries easier to review. `criterion` is the value for one option; TypeSafe's
 mapping is built as `{label: criterion}`.
 
 The task builder validates the configuration against labels loaded from the pinned dataset. It
-then produces the same state and TypeSafe `Choice` for Jev or an LLM:
+then produces the same state and TypeSafe `Choice` for every model:
 
 ```python
 from pathlib import Path
@@ -294,6 +309,7 @@ check. It references the shared task and calls Jev plus the three candidate LLMs
 
 ```toml
 name = "BANKING77 smoke benchmark"
+baseline_model_id = "jev"
 task_config = "../tasks/banking77.toml"
 
 [cohort]
@@ -311,8 +327,9 @@ model_concurrency = 4
 
 [[models]]
 id = "jev"
-backend = "jev"
+backend = "system_one"
 model = "typesafe-ai/jev"
+provider = "typesafe-ai"
 
 [[models]]
 id = "gpt-5-6-luna"
@@ -329,6 +346,28 @@ reasoning_effort = "low"
 same training split, random seed, cohort size, models, and LLM output mode, so both smoke plans
 select the same example and differ only in the task definition.
 
+Three System One-only connectivity plans compare Jev, Laya, and Liquid d1, with Jev as baseline:
+
+- `experiments/intent_classification/benchmarks/banking77-system-one-smoke.toml`: one training
+  example with all 77 intent criteria.
+- `experiments/intent_classification/benchmarks/banking77-without-criteria-system-one-smoke.toml`:
+  the same training example and all 77 options, without criteria.
+- `experiments/boolean_question_answering/benchmarks/boolq-system-one-smoke.toml`: two stratified
+  training examples.
+
+They omit `[llm_output]`. Every model receives identical frozen states and questions, including
+all 77 BANKING77 options. Laya's large-option behavior is an experimental limitation to measure;
+the framework does not shortlist options or introduce a hierarchy. To run a single model, retain
+its `[[models]]` table and set `baseline_model_id` to its ID.
+
+Live validation on 2026-10-06 used 15 HTTP attempts. Jev and Liquid d1 accepted all three smoke
+plans and a combined Choice/Noul/Score request. Laya accepted BoolQ and the combined request,
+but Boundless returned HTTP 422 for both full 77-option BANKING77 variants. The gateway did not
+identify the precise input limit. These failures remain recorded; BANKING77 compatibility for
+Laya is not confirmed. Raw requests, responses, usage, costs, errors, and source snapshots are
+saved under `outputs/validation/system-one/`. Connectivity checks do not establish comparative
+model quality.
+
 `banking77-timing-pilot.toml` is a separate training-only timing-method check using 10 random
 examples. It runs models and examples sequentially and measures every selected example, including
 the first request. It makes no additional warm-up calls and is not a thesis experiment.
@@ -340,12 +379,14 @@ for choosing the final comparison models. It is not the final held-out result, a
 the reserved test split. Run the smoke plan and inspect its recorded costs and errors before
 starting this larger plan.
 
-The plan requires exactly one Jev entry and at least one LLM. Model IDs are stable local names used
-in file paths and reports. LLM providers are pinned; Jev is pinned to TypeSafe's Vercel provider by
-the client. An LLM can set `reasoning_effort` to `none`, `minimal`, `low`, `medium`, `high`, or
+A plan accepts one or more models in any combination of System One models and LLMs.
+`baseline_model_id` must name one configured model; for a single-model run it names that sole
+model. Reports compare every other model with this baseline. Model IDs are stable local names
+used in paths and reports. Every model requires an explicit pinned `provider`. An LLM can set
+`reasoning_effort` to `none`, `minimal`, `low`, `medium`, `high`, or
 `xhigh`; omission leaves the provider default unchanged. The current candidate plans set
-Luna to `low` and disable reasoning for Gemini Flash Lite and Qwen Flash. Jev does not accept this
-field. `cohort.split` is validated by the selected dataset: BANKING77 supports `train` and `test`,
+Luna to `low` and disable reasoning for Gemini Flash Lite and Qwen Flash. System One models
+do not accept this field. `cohort.split` is validated by the selected dataset: BANKING77 supports `train` and `test`,
 while BoolQ supports `train` and `validation`. `random` selects any requested number of examples
 and is suitable for smoke checks. `stratified_random` selects across Choice labels, boolean
 values, or Score levels before adding another example from a class. It therefore requires at
@@ -354,8 +395,9 @@ repeatable. Use `strategy = "all"` without `size` or `seed` for the complete con
 
 `llm_output.mode = "discrete"` makes every LLM return only the structured decision needed for the
 task. Set it to `"probabilities"` when an experiment needs Choice distributions, BoolQ
-`P(true)`, or Score level probabilities. The field is required; the software does not choose a
-mode implicitly. The setting does not change Jev's native answer details, and discrete mode does not
+`P(true)`, or Score level probabilities. The table is required whenever a plan includes an LLM
+and optional for System One-only plans; the software does not choose an LLM mode implicitly. System One output is always recorded as
+`native_probabilities`, independently of this setting. Discrete mode does not
 produce artificial confidence values.
 
 `example_concurrency` bounds active examples inside each model run. `model_concurrency` bounds how
@@ -395,7 +437,7 @@ runs. Each attempt records the label, operating system, architecture, Python ver
 UTC offset without saving a hostname or IP address.
 
 The command prints a unique directory under `outputs/benchmarks/`. Every model receives the exact
-same saved cohort. A benchmark cannot accidentally compare 300 Jev examples with 600 LLM examples.
+same saved cohort.
 Individual provider failures become explicit unsuccessful predictions and remain in the accuracy
 denominator. If a process or setup failure stops a model, completed models and completed example IDs
 are preserved. Resume that same benchmark with:
@@ -477,7 +519,7 @@ Choice rows use `label`; Noul rows use `value` and optionally `probability`; Sco
 `level`, expected `score`, and optional probability details. In LLM discrete mode, confidence and
 probability fields are omitted. `decisions.jsonl` preserves state, typed answers, timing, usage,
 routing, raw responses, and diagnostics. Probability mode additionally preserves distributions
-and normalization details. Jev records its native answer details. Raw diagnostics can contain
+and normalization details. System One records its native answer details. Raw diagnostics can contain
 adapter internals, but the evaluator uses only the documented prediction fields. No API keys are
 saved. Model summaries record progress, measured and total elapsed time, latency distributions,
 and measured usage. Vercel's reported cost is read from `usage.cost` or gateway metadata when
@@ -504,9 +546,12 @@ JSON and JSONL files preserve the values needed to create graphs later:
 - `per_label_metrics.jsonl`: precision, recall, F1, and support for every model-label pair.
 - `model_outcomes.jsonl`: one correctness/status row per model and example, including question
   type, reference and predicted type-specific fields, end-to-end latency, and usage.
-- `pairwise_statistics.jsonl`: Jev versus each LLM, including accuracy difference, the paired
-  correctness contingency table, valid-label agreement, and the exact two-sided McNemar p-value.
+- `pairwise_statistics.jsonl`: the configured baseline versus every other model, including
+  accuracy difference, the paired correctness contingency table, valid-label agreement, and the exact two-sided McNemar p-value.
 - `summary.json`: the complete metrics above plus every model's confusion matrix.
+
+Single-model runs retain metrics and an empty comparisons table; their analysis omits the
+pairwise chart.
 
 Accuracy is correct predictions divided by every cohort example, including missing, invalid, and
 failed predictions. Macro-F1 is the unweighted mean over the dataset’s discrete classes.
@@ -527,6 +572,11 @@ revision. Confirm resolved routing with a small development benchmark before a t
 Preparing data, mocked provider tests, and checking the software do not constitute measured model
 results.
 
+Completed historical reports remain readable by the analysis loader. Historical outputs are
+immutable. An interrupted run whose frozen plan uses the retired `jev` backend must be resumed
+with its original code revision (recorded in `metadata.json`); do not rewrite its plan to make it
+load under this revision.
+
 ## Analyze completed benchmarks
 
 Version analysis notebooks in `notebooks/`, reusable loading and plotting code in
@@ -545,7 +595,8 @@ Use the project's `.venv` kernel if opening the notebook in PyCharm or another e
 The first notebook defaults to the completed 770-example BANKING77 model-selection run.
 Change `RUN_ID` in its first code cell to analyze a different completed BANKING77 run, then run
 the cells from top to bottom. It includes run provenance, cohort checks, model metrics and
-recorded costs, intent-level errors, latency distributions, and Jev–LLM paired correctness.
+recorded costs, intent-level errors, latency distributions, and paired correctness between the
+baseline and each comparison model.
 Keep the versioned notebook cleared of execution outputs; save executed copies under `outputs/`.
 
 `notebooks/banking77_smoke_10.ipynb` defaults to the completed 10-example BANKING77
@@ -594,7 +645,8 @@ uv run ruff format --check .
 - `src/thesis_research/datasets/`: shared typed examples, dataset registry, and pinned adapters.
 - `src/thesis_research/config.py`: typed, validated task configuration.
 - `src/thesis_research/tasks/`: validated state and question construction.
-- `src/thesis_research/clients/`: shared result contracts plus Jev and Vercel AI Gateway clients.
+- `src/thesis_research/clients/`: shared result contracts plus System One and LLM clients
+  through Vercel AI Gateway.
 - `src/thesis_research/prediction.py`: bounded prediction and result serialization.
 - `src/thesis_research/benchmark/`: plans, shared cohorts, resumable model runs, and reports.
 - `src/thesis_research/benchmark/model_records.py`: model-record validation and metric summaries.

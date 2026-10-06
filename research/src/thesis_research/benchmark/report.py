@@ -1,4 +1,4 @@
-"""Build machine-readable metrics for Jev-to-LLM comparisons."""
+"""Build machine-readable metrics for shared-cohort model comparisons."""
 
 import json
 import math
@@ -20,8 +20,10 @@ def generate_report(
     models: Sequence[ModelSpec],
     examples: list[DatasetExample],
     schema: ReferenceSchema,
+    *,
+    baseline_model_id: str,
 ) -> dict[str, Any]:
-    """Evaluate every model and compare each LLM with the Jev baseline.
+    """Evaluate every model and compare it with the configured baseline.
 
     The JSONL tables are deliberately tidy: each row is one model, label,
     pair, or paired example. They can later be loaded directly into pandas or
@@ -48,7 +50,7 @@ def generate_report(
         )
         model_decisions[model.id] = decisions
 
-    baseline = next(model for model in models if model.backend == "jev")
+    baseline = next(model for model in models if model.id == baseline_model_id)
     comparisons = [
         _compare_outcomes(
             baseline,

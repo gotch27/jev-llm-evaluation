@@ -1,4 +1,5 @@
 name = "BANKING77 smoke benchmark"
+baseline_model_id = "jev"
 task_config = "../tasks/banking77.toml"
 
 [cohort]
@@ -16,8 +17,9 @@ model_concurrency = 4
 
 [[models]]
 id = "jev"
-backend = "jev"
+backend = "system_one"
 model = "typesafe-ai/jev"
+provider = "typesafe-ai"
 
 [[models]]
 id = "gpt-5-6-luna"
