@@ -527,6 +527,68 @@ revision. Confirm resolved routing with a small development benchmark before a t
 Preparing data, mocked provider tests, and checking the software do not constitute measured model
 results.
 
+## Analyze completed benchmarks
+
+Version analysis notebooks in `notebooks/`, reusable loading and plotting code in
+`src/thesis_research/analysis.py`, and generated tables, figures, and executed notebook copies
+in `outputs/analysis/<run-id>/`. The saved benchmark is the source of truth. Analysis reads its
+frozen reports without making model calls or modifying the original run.
+
+Install the optional analysis dependencies and open Jupyter from `research/`:
+
+```sh
+uv sync --locked --group analysis
+uv run --group analysis jupyter lab notebooks/banking77_model_selection.ipynb
+```
+
+Use the project's `.venv` kernel if opening the notebook in PyCharm or another editor.
+The first notebook defaults to the completed 770-example BANKING77 model-selection run.
+Change `RUN_ID` in its first code cell to analyze a different completed BANKING77 run, then run
+the cells from top to bottom. It includes run provenance, cohort checks, model metrics and
+recorded costs, intent-level errors, latency distributions, and Jev–LLM paired correctness.
+Keep the versioned notebook cleared of execution outputs; save executed copies under `outputs/`.
+
+`notebooks/banking77_smoke_10.ipynb` defaults to the completed 10-example BANKING77
+training smoke run. Run its cells to save tables, figures, and a provenance manifest in
+`outputs/analysis/<run-id>/`. This small cohort checks the pipeline and is not sufficient
+for model selection or final performance claims.
+
+The same figures and tables can be generated without opening Jupyter:
+
+```sh
+uv run --group analysis python -m thesis_research.analysis \
+  outputs/benchmarks/20260930T222653327742Z-d103c737bc91438482be7af965fb77be
+```
+
+The exporter writes four CSV tables (`model_comparison`, `per_label_metrics`, `paired_comparison`,
+and `confusion_pairs`), five figures as vector PDF and 300-dpi PNG (`classification_quality`,
+`latency_ecdf`, `accuracy_latency`, `intent_f1`, and `paired_correctness`), and a manifest recording
+source checksums, analysis code checksum, and plotting-library versions. PDFs are suitable for
+including in the thesis; PNGs are useful for previews. Output defaults to
+`outputs/analysis/<run-id>/`; `--output-dir` overrides it. Re-running replaces the derived exports.
+The first workflow supports completed Choice benchmarks; BoolQ and Score analysis can be added
+when those experiments need it.
+
+Training results are labeled as development/model selection in the figures. Every figure shows
+its dataset, split, and sample size. Unavailable costs remain missing. Accuracy retains failures
+in its denominator, while latency plots include all measured decisions. Per-intent scores from
+the 770-example cohort have only 10 references each and should be interpreted accordingly.
+The oracle accuracy in the paired table uses reference labels and is only an upper bound on
+combined performance, not a measured combined system.
+
+These figures are descriptive point estimates. For final thesis comparisons, freeze the task,
+models, split, and planned comparisons first, then add an appropriate uncertainty method and
+multiple-comparison policy. Saved McNemar p-values are currently exploratory and unadjusted.
+Use the same plotting functions on the final held-out run to keep the presentation consistent.
+
+Check analysis code alongside the existing research checks:
+
+```sh
+uv run --group analysis python -m pytest
+uv run ruff check .
+uv run ruff format --check .
+```
+
 ## Code layout and checks
 
 - `src/thesis_research/datasets/`: shared typed examples, dataset registry, and pinned adapters.
@@ -543,6 +605,8 @@ results.
   three question types.
 - `src/thesis_research/run_storage.py`: shared durable-record and Git metadata helpers.
 - `src/thesis_research/cli.py`: argument parsing and command dispatch only.
+- `src/thesis_research/analysis.py`: completed Choice report validation, tables, and figure exports.
+- `notebooks/`: versioned experiment analysis notebooks with cleared outputs.
 - `experiments/*/tasks/`: versioned dataset, state mapping, question, labels/rubrics, and criteria.
 - `experiments/*/benchmarks/`: dataset split, LLM output, model, cohort, and execution plans.
 - `tests/`: offline tests with synthetic fixtures, not model experiments.

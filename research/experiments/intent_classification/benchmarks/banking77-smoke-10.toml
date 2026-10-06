@@ -1,0 +1,41 @@
+name = "BANKING77 smoke benchmark"
+task_config = "../tasks/banking77.toml"
+
+[cohort]
+split = "train"
+strategy = "random"
+size = 10
+seed = 20260920
+
+[llm_output]
+mode = "discrete"
+
+[execution]
+example_concurrency = 1
+model_concurrency = 4
+
+[[models]]
+id = "jev"
+backend = "jev"
+model = "typesafe-ai/jev"
+
+[[models]]
+id = "gpt-5-6-luna"
+backend = "llm"
+model = "openai/gpt-5.6-luna"
+provider = "openai"
+reasoning_effort = "low"
+
+[[models]]
+id = "gemini-2-5-flash-lite"
+backend = "llm"
+model = "google/gemini-2.5-flash-lite"
+provider = "google"
+reasoning_effort = "none"
+
+[[models]]
+id = "qwen3-5-flash"
+backend = "llm"
+model = "alibaba/qwen3.5-flash"
+provider = "alibaba"
+reasoning_effort = "none"
