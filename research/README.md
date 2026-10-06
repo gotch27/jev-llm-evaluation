@@ -3,8 +3,8 @@
 Python components for the thesis experiments. The project prepares pinned labeled datasets,
 builds one shared TypeSafe `Choice`, `Noul`, or `Score` question per task, calls System One models
 and LLMs through Vercel AI Gateway, and runs coordinated benchmarks in which every model receives the same
-frozen cohort. Reports are saved as machine-readable tables for later statistical analysis and
-visualization. BANKING77 is the Choice task and BoolQ is the first Noul task.
+frozen cohort. Every completed run prints a statistics table and generates a standalone HTML
+dashboard alongside the machine-readable tables used for later statistical analysis. BANKING77 is the Choice task and BoolQ is the first Noul task.
 
 See [Experiment configuration reference](CONFIGURATION.md) for complete task and benchmark TOML
 examples, supported fields, allowed values, and validation rules.
@@ -437,7 +437,44 @@ runs. Each attempt records the label, operating system, architecture, Python ver
 UTC offset without saving a hostname or IP address.
 
 The command prints a unique directory under `outputs/benchmarks/`. Every model receives the exact
-same saved cohort.
+same saved cohort. When it finishes, the terminal shows accuracy, macro-F1, failure counts,
+reported cost, and median/p95 decision latency for each model. Noul adds Brier score, log loss and
+probability coverage; Score adds MAE, RMSE, weighted kappa and numeric coverage.
+
+Every new completed run also generates `report/index.html`, a self-contained dashboard with
+metric tables, accuracy/F1 bars, prediction status, latency distributions, reported costs,
+paired correctness against the configured baseline, per-class F1 and unsuccessful predictions.
+Single-model runs omit the paired chart. Unknown costs remain unknown and reported zeros remain
+zero. The dashboard supports Choice, Noul and Score without installing notebook dependencies.
+
+The terminal prints a clickable dashboard path. Add `--open-report` to open it in your default
+browser after the run:
+
+```sh
+uv run thesis-research benchmark \
+  --plan experiments/boolean_question_answering/benchmarks/boolq-system-one-smoke.toml \
+  --open-report
+```
+
+Rendering starts after the machine-readable results and completed status have been saved.
+A dashboard failure leaves the experiment complete, logs a warning, and records its error in
+`report/visualization.json`; it does not repeat model calls. That file otherwise records the
+HTML checksum, source checksums, benchmark code and reporting code revisions.
+
+For an existing completed run, or to regenerate a dashboard after fixing a renderer failure:
+
+```sh
+uv run thesis-research report RUN_DIRECTORY --open-report
+# Optional: choose where the generated report is saved.
+uv run thesis-research report RUN_DIRECTORY --output-dir outputs/reports/my-report
+```
+
+This command prints the same terminal statistics and exports HTML plus provenance to
+`outputs/reports/<run-id>/` by default. Exports must stay outside the source run. It needs no API
+key and makes no provider calls; historical reports remain unchanged, including runs whose
+frozen plans use retired backend names. A normal resume of an already completed run also shows
+statistics and links its dashboard when present, without regenerating artifacts.
+
 Individual provider failures become explicit unsuccessful predictions and remain in the accuracy
 denominator. If a process or setup failure stops a model, completed models and completed example IDs
 are preserved. Resume that same benchmark with:
@@ -512,6 +549,8 @@ report/model_metrics.jsonl
 report/per_label_metrics.jsonl
 report/pairwise_statistics.jsonl
 report/model_outcomes.jsonl
+report/index.html             # derived dashboard
+report/visualization.json     # dashboard provenance or rendering error
 ```
 
 `predictions.jsonl` contains one stable example ID and either a typed result or an explicit error.
@@ -578,6 +617,10 @@ with its original code revision (recorded in `metadata.json`); do not rewrite it
 load under this revision.
 
 ## Analyze completed benchmarks
+
+The automatic dashboard is the immediate run review. Use notebooks for exploratory analysis,
+comparisons across runs, and final thesis figures. Dashboards and notebooks share the saved-table
+loader and model display names, so both read the same recorded metrics.
 
 Version analysis notebooks in `notebooks/`, reusable loading and plotting code in
 `src/thesis_research/analysis.py`, and generated tables, figures, and executed notebook copies
@@ -657,6 +700,7 @@ uv run ruff format --check .
   three question types.
 - `src/thesis_research/run_storage.py`: shared durable-record and Git metadata helpers.
 - `src/thesis_research/cli.py`: argument parsing and command dispatch only.
+- `src/thesis_research/reporting.py` and `reporting.css`: terminal metrics and standalone dashboards.
 - `src/thesis_research/analysis.py`: completed Choice report validation, tables, and figure exports.
 - `notebooks/`: versioned experiment analysis notebooks with cleared outputs.
 - `experiments/*/tasks/`: versioned dataset, state mapping, question, labels/rubrics, and criteria.

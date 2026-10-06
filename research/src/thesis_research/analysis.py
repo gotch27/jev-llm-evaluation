@@ -5,7 +5,6 @@ reports and never calls a model or changes the benchmark that produced them.
 """
 
 import argparse
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import version
@@ -17,30 +16,9 @@ import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
 
+from thesis_research.reporting import MODEL_COLORS, MODEL_NAMES, REPORT_TABLES, load_saved_report
 from thesis_research.run_storage import file_checksum, git_state, write_json
 
-MODEL_NAMES = {
-    "jev": "Jev",
-    "laya": "Laya",
-    "liquid-d1": "Liquid d1",
-    "gpt-5-6-luna": "GPT-5.6 Luna",
-    "gemini-2-5-flash-lite": "Gemini 2.5 Flash Lite",
-    "qwen3-5-flash": "Qwen 3.5 Flash",
-}
-MODEL_COLORS = {
-    "jev": "#0072B2",
-    "laya": "#56B4E9",
-    "liquid-d1": "#E69F00",
-    "gpt-5-6-luna": "#D55E00",
-    "gemini-2-5-flash-lite": "#009E73",
-    "qwen3-5-flash": "#CC79A7",
-}
-REPORT_TABLES = (
-    "model_metrics",
-    "per_label_metrics",
-    "pairwise_statistics",
-    "model_outcomes",
-)
 _PAIRWISE_COLUMNS = (
     "question_type",
     "baseline_model_id",
@@ -87,31 +65,17 @@ class BenchmarkAnalysis:
         )
 
 
-def _json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def load_benchmark(run: Path) -> BenchmarkAnalysis:
     """Load completed reports, rejecting partial or mismatched Choice cohorts."""
-    run = run.resolve()
-    metadata = _json(run / "metadata.json")
-    if metadata.get("status") != "completed":
-        raise ValueError("Analysis requires a completed benchmark with a final report")
-    cohort = _json(run / "cohort.json")
-    summary = _json(run / "report" / "summary.json")
-    if cohort.get("question_type") != "choice" or summary.get("question_type") != "choice":
+    saved = load_saved_report(run)
+    if saved.question_type != "choice":
         raise ValueError("This first analysis workflow supports Choice benchmarks")
     tables = [
-        pd.DataFrame(
-            json.loads(line)
-            for line in (run / "report" / f"{name}.jsonl").read_text().splitlines()
-            if line.strip()
-        )
-        for name in REPORT_TABLES
+        pd.DataFrame(rows) for rows in (saved.metrics, saved.per_label, saved.pairs, saved.outcomes)
     ]
     if tables[2].empty:
         tables[2] = pd.DataFrame(columns=_PAIRWISE_COLUMNS)
-    data = BenchmarkAnalysis(run, metadata, cohort, summary, *tables)
+    data = BenchmarkAnalysis(saved.run, saved.metadata, saved.cohort, saved.summary, *tables)
     _validate_cohort(data)
     return data
 

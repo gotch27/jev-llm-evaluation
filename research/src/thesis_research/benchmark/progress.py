@@ -54,6 +54,10 @@ class BenchmarkObserver(Protocol):
 
     def benchmark_failed(self, error: BaseException) -> None: ...
 
+    def visualization_completed(self, path: Path) -> None: ...
+
+    def visualization_failed(self, error: Exception) -> None: ...
+
 
 class NullBenchmarkObserver:
     """Ignore progress notifications for library calls and offline tests."""
@@ -89,4 +93,10 @@ class NullBenchmarkObserver:
         pass
 
     def benchmark_failed(self, error: BaseException) -> None:
+        pass
+
+    def visualization_completed(self, path: Path) -> None:
+        pass
+
+    def visualization_failed(self, error: Exception) -> None:
         pass

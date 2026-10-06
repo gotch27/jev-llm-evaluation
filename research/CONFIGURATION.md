@@ -242,7 +242,16 @@ Score additionally reports MAE, RMSE, quadratic weighted kappa, and numeric cove
 
 The JSONL report tables include `question_type` and retain the existing Choice label fields while
 adding boolean, probability, level, and score fields where applicable. They remain suitable for
-pandas, R, or later visualization without repeating model calls.
+pandas, R, or later visualization without repeating model calls. New completed runs also print
+terminal statistics and generate `report/index.html` automatically. Add `--open-report` to the
+benchmark command to open that dashboard. Choice, Noul and Score dashboards use the saved
+metrics; no extra model calls or notebook dependencies are needed. A visualization failure does
+not change completed benchmark status.
+
+Use `uv run thesis-research report RUN_DIRECTORY --open-report` to export a dashboard and show
+statistics for an existing completed run. The default export is `outputs/reports/<run-id>/`;
+`--output-dir` can select another directory outside the source run. Historical records stay
+unchanged. Rendering provenance and any rendering error are saved in `visualization.json`.
 
 ## Commands
 

@@ -34,6 +34,7 @@ from thesis_research.datasets import (
     load_prepared_dataset,
     sha256_bytes,
 )
+from thesis_research.reporting import generate_dashboard
 from thesis_research.run_storage import create_run_directory, file_checksum, git_state, write_json
 from thesis_research.tasks import StructuredTask, build_structured_task
 
@@ -132,6 +133,7 @@ async def run_benchmark(
         metadata["error"] = f"{type(error).__name__}: {error}"
         write_json(run / "metadata.json", metadata)
         raise
+    _finish_report(run, observer)
     return run
 
 
@@ -155,6 +157,9 @@ async def resume_benchmark(
     if metadata.get("status") == "completed":
         if retry_errors:
             raise ValueError("A completed benchmark report cannot retry error records")
+        observer.benchmark_completed(run)
+        if (run / "report/index.html").exists():
+            observer.visualization_completed(run / "report/index.html")
         return run
     prepared = load_prepared_dataset(
         data,
@@ -230,6 +235,7 @@ async def resume_benchmark(
         metadata["error"] = f"{type(error).__name__}: {error}"
         write_json(metadata_path, metadata)
         raise
+    _finish_report(run, observer)
     return run
 
 
@@ -303,7 +309,6 @@ async def _execute(
         metadata["report_artifacts"] = report_artifacts(run)
         metadata["status"] = "completed"
         attempt["status"] = "completed"
-        observer.benchmark_completed(run)
     except Exception as error:
         if attempt["status"] == "running":
             attempt["status"] = "failed"
@@ -318,6 +323,30 @@ async def _execute(
         attempt["finished_at"] = datetime.now(UTC).isoformat()
         metadata["models"] = _model_statuses(run, plan)
         write_json(run / "metadata.json", metadata)
+
+
+def _finish_report(run: Path, observer: BenchmarkObserver) -> None:
+    """Render after durable completion; presentation failures never undo results."""
+    try:
+        dashboard = generate_dashboard(run)
+    except Exception as error:
+        try:
+            write_json(
+                run / "report/visualization.json",
+                {
+                    "status": "failed",
+                    "generated_at": datetime.now(UTC).isoformat(),
+                    "error": f"{type(error).__name__}: {error}",
+                    "reporting_code": git_state(),
+                },
+            )
+        except OSError:
+            pass  # The saved experiment remains complete even on a read-only disk.
+        observer.benchmark_completed(run)
+        observer.visualization_failed(error)
+    else:
+        observer.benchmark_completed(run)
+        observer.visualization_completed(dashboard)
 
 
 def _verify_saved_inputs(run: Path, metadata: dict[str, Any]) -> None:

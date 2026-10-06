@@ -742,6 +742,8 @@ provider = "fake"
     report = json.loads((run / "report" / "summary.json").read_text())
     assert report["question_type"] == "noul"
     assert report["models"]["jev"]["accuracy"] == 1
+    assert "Brier score" in (run / "report/index.html").read_text()
+    assert json.loads((run / "report/visualization.json").read_text())["status"] == "completed"
     metrics = [
         json.loads(line)
         for line in (run / "report" / "model_metrics.jsonl").read_text().splitlines()
@@ -907,3 +909,5 @@ provider = "fake"
     assert comparisons[0]["question_type"] == "score"
     assert comparisons[0]["both_correct"] == 3
     assert json.loads((run / "metadata.json").read_text())["status"] == "completed"
+    assert "Weighted kappa" in (run / "report/index.html").read_text()
+    assert json.loads((run / "report/visualization.json").read_text())["status"] == "completed"

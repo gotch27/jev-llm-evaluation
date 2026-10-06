@@ -10,9 +10,12 @@ from typing import Self, Sequence
 from rich.console import Console
 from rich.markup import escape
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn
-from rich.table import Column
+from rich.style import Style
+from rich.table import Column, Table
+from rich.text import Text
 
 from thesis_research.benchmark.progress import BenchmarkObserver, ModelProgress
+from thesis_research.reporting import TASK_METRICS, format_number, load_saved_report, model_name
 
 
 class BenchmarkTerminal(BenchmarkObserver):
@@ -113,7 +116,66 @@ class BenchmarkTerminal(BenchmarkObserver):
         self._log("cyan", "All model runs completed; generating comparison report")
 
     def benchmark_completed(self, run: Path) -> None:
+        self._progress.stop()
         self._log("green", f"Benchmark completed: {run}")
+        self.show_results(run)
+
+    def show_results(self, run: Path) -> None:
+        """Print the saved metrics without needing a notebook or JSON reader."""
+        report = load_saved_report(run)
+        self.console.print(Text(report.caption, style="bold"))
+        self.console.print(f"Baseline: {escape(model_name(report.summary['baseline_model_id']))}")
+        table = Table(title="Benchmark statistics", padding=(0, 1))
+        for label in ("Model", "N", "Accuracy", "Macro-F1", "Failed", "Cost USD", "p50 s", "p95 s"):
+            table.add_column(label, justify="left" if label == "Model" else "right")
+        for row in report.metrics:
+            table.add_row(
+                model_name(row["model_id"]),
+                str(row["total"]),
+                format_number(row.get("accuracy"), percentage=True),
+                format_number(row.get("macro_f1")),
+                str(row.get("failed", 0)),
+                format_number(row.get("cost_usd"), digits=8),
+                format_number(row.get("all_decision_latency_p50_seconds")),
+                format_number(row.get("all_decision_latency_p95_seconds")),
+            )
+        self.console.print(table)
+        extras = TASK_METRICS[report.question_type]
+        if extras:
+            table = Table(title="Task-specific statistics")
+            table.add_column("Model")
+            for _, label in extras:
+                table.add_column(label, justify="right")
+            for row in report.metrics:
+                table.add_row(
+                    model_name(row["model_id"]),
+                    *[
+                        format_number(row.get(field), percentage=field.endswith("coverage"))
+                        for field, _ in extras
+                    ],
+                )
+            self.console.print(table)
+        if any(row.get("invalid", 0) or row.get("missing", 0) for row in report.metrics):
+            for row in report.metrics:
+                self.console.print(
+                    Text(
+                        f"{model_name(row['model_id'])}: invalid={row.get('invalid', 0)}, "
+                        f"missing={row.get('missing', 0)}"
+                    )
+                )
+        self.console.print("[dim]Unknown cost is unreported; reported zero remains zero.[/dim]")
+
+    def visualization_completed(self, path: Path) -> None:
+        link = Text(
+            str(path.resolve()),
+            style=Style(color="cyan", underline=True, link=path.resolve().as_uri()),
+        )
+        self.console.print(Text("Dashboard: ") + link)
+
+    def visualization_failed(self, error: Exception) -> None:
+        self._log(
+            "yellow", f"Dashboard could not be generated; benchmark results are saved: {error}"
+        )
 
     def benchmark_failed(self, error: BaseException) -> None:
         self._log("red", f"Benchmark stopped: {type(error).__name__}: {error}")

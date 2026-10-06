@@ -911,3 +911,44 @@ def test_system_one_training_smokes_match_routes_and_preserve_banking77_variants
     assert boolq.cohort.strategy == "stratified_random"
     for plan in (criteria, without):
         assert len(load_task_config(plan.task_config).question.options) == 77
+
+
+def test_visualization_failure_keeps_benchmark_complete_and_resume_does_not_repeat_calls(
+    benchmark_dataset, tmp_path, monkeypatch
+):
+    from thesis_research.benchmark import runner
+
+    data, labels = benchmark_dataset
+    plan = write_flexible_plan(tmp_path, ("laya",), "laya")
+    client = FakeDecisionClient(labels, model_id="laya")
+
+    def fail_dashboard(run):
+        assert json.loads((run / "metadata.json").read_text())["status"] == "completed"
+        raise RuntimeError("simulated renderer failure")
+
+    monkeypatch.setattr(runner, "generate_dashboard", fail_dashboard)
+    run = asyncio.run(run_benchmark(plan, data, tmp_path / "outputs", _clients={"laya": client}))
+    assert len(client.calls) == 77
+    assert json.loads((run / "metadata.json").read_text())["status"] == "completed"
+    assert json.loads((run / "report/visualization.json").read_text())["status"] == "failed"
+    before = {path.relative_to(run): path.read_bytes() for path in run.rglob("*") if path.is_file()}
+    assert asyncio.run(resume_benchmark(run, data)) == run
+    assert {
+        path.relative_to(run): path.read_bytes() for path in run.rglob("*") if path.is_file()
+    } == before
+
+
+def test_pipeline_generates_dashboard_after_saved_completion(benchmark_dataset, tmp_path):
+    from thesis_research.run_storage import file_checksum
+
+    data, labels = benchmark_dataset
+    plan = write_flexible_plan(tmp_path, ("liquid-d1",), "liquid-d1")
+    client = FakeDecisionClient(labels, model_id="liquid-d1")
+    run = asyncio.run(
+        run_benchmark(plan, data, tmp_path / "outputs", _clients={"liquid-d1": client})
+    )
+    assert (run / "report/index.html").is_file()
+    assert "Single-model run" in (run / "report/index.html").read_text()
+    manifest = json.loads((run / "report/visualization.json").read_text())
+    assert manifest["status"] == "completed"
+    assert manifest["source_sha256"]["metadata.json"] == file_checksum(run / "metadata.json")
