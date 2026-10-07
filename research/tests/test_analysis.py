@@ -164,8 +164,12 @@ def test_cannot_export_into_original_run(completed_run):
 
 
 @pytest.mark.parametrize("single_model", [False, True])
+@pytest.mark.parametrize(
+    "baseline,display_name",
+    [("liquid-d1", "Liquid d1"), ("gpt-6-luna-decisions", "GPT-6 Luna Decisions")],
+)
 def test_system_one_names_arbitrary_baseline_and_single_model_exports(
-    completed_run, tmp_path, single_model
+    completed_run, tmp_path, single_model, baseline, display_name
 ):
     import matplotlib.pyplot as plt
 
@@ -174,8 +178,8 @@ def test_system_one_names_arbitrary_baseline_and_single_model_exports(
     report = completed_run / "report"
     summary_path = report / "summary.json"
     summary = json.loads(summary_path.read_text())
-    summary["baseline_model_id"] = "liquid-d1"
-    mapping = {"jev": "laya", "llm": "liquid-d1"}
+    summary["baseline_model_id"] = baseline
+    mapping = {"jev": "laya", "llm": baseline}
     summary["models"] = {
         mapping[key]: value
         for key, value in summary["models"].items()
@@ -192,7 +196,7 @@ def test_system_one_names_arbitrary_baseline_and_single_model_exports(
     path = report / "pairwise_statistics.jsonl"
     pairs = [] if single_model else [json.loads(path.read_text())]
     for pair in pairs:
-        pair["baseline_model_id"] = "liquid-d1"
+        pair["baseline_model_id"] = baseline
         pair["comparison_model_id"] = "laya"
     write_rows(path, pairs)
     data = load_benchmark(completed_run)
@@ -204,10 +208,10 @@ def test_system_one_names_arbitrary_baseline_and_single_model_exports(
     labels = [
         tick.get_text() for tick in figures["classification_quality"].axes[0].get_xticklabels()
     ]
-    assert labels == (["Liquid d1"] if single_model else ["Laya", "Liquid d1"])
+    assert labels == ([display_name] if single_model else ["Laya", display_name])
     if not single_model:
         ax = figures["paired_correctness"].axes[0]
-        assert "Liquid d1" in ax.get_title()
+        assert display_name in ax.get_title()
         assert "Only comparison model correct" in ax.get_legend_handles_labels()[1]
     for figure in figures.values():
         plt.close(figure)

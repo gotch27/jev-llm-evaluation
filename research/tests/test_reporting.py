@@ -69,7 +69,12 @@ def saved_report(tmp_path):
                     "invalid": 0,
                     "missing": 0,
                     "valid": 2,
-                    "cost_usd": {"jev": None, "laya": 0.0, "liquid-d1": 0.0015}[model],
+                    "cost_usd": {
+                        "jev": None,
+                        "laya": 0.0,
+                        "liquid-d1": 0.0015,
+                        "gpt-6-luna-decisions": 0.0002,
+                    }[model],
                     "all_decision_latency_p50_seconds": 0.25,
                     "all_decision_latency_p95_seconds": 0.565,
                     "brier_score": 0.12,
@@ -127,29 +132,35 @@ def saved_report(tmp_path):
 
 @pytest.mark.parametrize("question_type", ["choice", "noul", "score"])
 @pytest.mark.parametrize("single", [True, False])
+@pytest.mark.parametrize("baseline", ["laya", "gpt-6-luna-decisions"])
 def test_standalone_dashboard_supports_all_tasks_and_arbitrary_baselines(
-    saved_report, tmp_path, question_type, single
+    saved_report, tmp_path, question_type, single, baseline
 ):
-    models = ("laya",) if single else ("jev", "laya", "liquid-d1")
-    run = saved_report(question_type, models)
+    models = (baseline,) if single else ("jev", "laya", "liquid-d1", "gpt-6-luna-decisions")
+    run = saved_report(question_type, models, baseline)
     before = {str(path): file_checksum(path) for path in run.rglob("*") if path.is_file()}
     path = generate_dashboard(run, tmp_path / "export/index.html")
     document = path.read_text()
     assert "33.3%" in document
-    assert "0.00000000" in document  # Reported zero is visible.
+    if "laya" in models:
+        assert "0.00000000" in document  # Reported zero is visible.
     assert "unknown" in document if not single else "Single-model run" in document
     assert "&lt;script&gt;" in document and "<script>" not in document
     assert "&lt;img" in document and "<img" not in document
     assert "<svg" in document and "https://" not in document
     assert "Decision latency distribution" in document
     assert "(n=3)" in document  # Includes zero latency and failed decisions.
-    assert ("Paired correctness · baseline: Laya" in document) != single
+    name = "Laya" if baseline == "laya" else "GPT-6 Luna Decisions"
+    assert (f"Paired correctness · baseline: {name}" in document) != single
+    if "gpt-6-luna-decisions" in models:
+        assert "GPT-6 Luna Decisions" in document
+        assert "stroke='#882255'" in document
     assert ("Brier score" in document) == (question_type == "noul")
     assert ("Weighted kappa" in document) == (question_type == "score")
     assert {str(path): file_checksum(path) for path in run.rglob("*") if path.is_file()} == before
     manifest = json.loads((path.parent / "visualization.json").read_text())
     assert manifest["status"] == "completed"
-    assert manifest["baseline_model_id"] == "laya"
+    assert manifest["baseline_model_id"] == baseline
     assert manifest["dashboard_sha256"] == file_checksum(path)
     assert manifest["source_sha256"]["report/model_metrics.jsonl"] == file_checksum(
         run / "report/model_metrics.jsonl"
@@ -212,7 +223,7 @@ def test_report_command_exports_history_without_credentials_or_model_calls(
     from thesis_research import cli
     from thesis_research.benchmark import model_run
 
-    run = saved_report("noul")
+    run = saved_report("noul", ("jev", "laya", "liquid-d1", "gpt-6-luna-decisions"))
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
     monkeypatch.setattr(cli, "load_dotenv", lambda **kwargs: None)
 
@@ -229,6 +240,7 @@ def test_report_command_exports_history_without_credentials_or_model_calls(
     captured = capsys.readouterr()
     assert captured.out.strip() == str(output / "index.html")
     assert "Brier score" in captured.err
+    assert "GPT-6 Luna Decisions" in captured.err
     assert "0.00000000" in captured.err and "unknown" in captured.err
     assert {
         path.relative_to(run): path.read_bytes() for path in run.rglob("*") if path.is_file()

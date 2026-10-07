@@ -29,3 +29,9 @@ id = "liquid-d1"
 backend = "system_one"
 model = "liquid/d1"
 provider = "liquid"
+
+[[models]]
+id = "gpt-6-luna-decisions"
+backend = "system_one"
+model = "openai/gpt-6-luna-decisions"
+provider = "openai"

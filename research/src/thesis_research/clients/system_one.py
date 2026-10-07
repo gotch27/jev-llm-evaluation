@@ -200,7 +200,7 @@ class VercelSystemOneDecisionClient(DecisionClient):
         return _result(
             self,
             dict(response.answers),
-            {},
+            _refusal_errors(raw, questions),
             [call],
             time.perf_counter() - started,
         )
@@ -229,6 +229,23 @@ class VercelSystemOneDecisionClient(DecisionClient):
         traceback: TracebackType | None,
     ) -> None:
         await self.aclose()
+
+
+def _refusal_errors(raw: dict[str, Any], questions: Questions) -> dict[str, DecisionError]:
+    """Recover per-question refusals omitted by the SDK's typed answer decoder."""
+    raw_answers = raw.get("answers")
+    if not isinstance(raw_answers, dict):
+        return {}
+    errors = {}
+    for question_id in questions:
+        answer = raw_answers.get(question_id)
+        if isinstance(answer, dict) and answer.get("type") == "refusal":
+            errors[question_id] = DecisionError(
+                "ModelRefusal",
+                f"Model declined to answer question {question_id!r}",
+                {"answer": answer},
+            )
+    return errors
 
 
 def _decision_error(error: TypeSafeError) -> DecisionError:

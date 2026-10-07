@@ -43,6 +43,7 @@ SYSTEM_ONE_ROUTES = (
     ("typesafe-ai/jev", "typesafe-ai"),
     ("convaiinnovations/laya", "boundless"),
     ("liquid/d1", "liquid"),
+    ("openai/gpt-6-luna-decisions", "openai"),
 )
 
 
@@ -748,6 +749,60 @@ def test_system_one_http_routes_preserve_shared_questions_answers_and_metadata(
     assert result.latency_seconds >= result.calls[0].latency_seconds >= 0
     assert result.calls[0].raw == payload
     assert "unused-test-key" not in json.dumps(result.calls[0].raw)
+
+
+@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("refused_ids", [("intent",), tuple(QUESTIONS)])
+def test_system_one_refusals_keep_successful_answers_usage_and_raw_without_retries(
+    monkeypatch, model, provider, refused_ids
+):
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
+    payload = _http_system_one_payload(model, provider)
+    payload["answers"].update(
+        intent={
+            "type": "choice",
+            "choice": "card",
+            "confidence": 0.9,
+            "probabilities": {"card": 0.9, "cash": 0.1},
+        },
+        urgency={
+            "type": "score",
+            "score": 1.8,
+            "confidence": 0.8,
+            "legend": {"0": "Not urgent", "1": "Urgent", "2": "Critical"},
+            "probabilities": {"0": 0.0, "1": 0.2, "2": 0.8},
+        },
+    )
+    for question_id in refused_ids:
+        payload["answers"][question_id] = {"type": "refusal", "name": question_id}
+    requests = []
+
+    def reply(request):
+        requests.append(request)
+        return httpx2.Response(200, json=payload)
+
+    async def run():
+        async with VercelSystemOneDecisionClient(
+            model, provider, _transport=httpx2.MockTransport(reply)
+        ) as client:
+            return await client.evaluate("A message", QUESTIONS)
+
+    result = asyncio.run(run())
+    assert len(requests) == 1
+    assert set(result.answers) == set(QUESTIONS) - set(refused_ids)
+    assert set(result.errors) == set(refused_ids)
+    for question_id, error in result.errors.items():
+        assert error.error_type == "ModelRefusal"
+        assert question_id in error.message
+        assert error.diagnostics["answer"] == payload["answers"][question_id]
+    assert result.usage.input_tokens == 12
+    assert result.usage.output_tokens == 0
+    assert result.usage.cost_usd == 0.0001
+    assert result.usage.retries == 0
+    assert result.calls[0].error is None  # HTTP succeeded, even if a question was refused.
+    assert result.calls[0].raw == payload
+    assert result.resolved_models == (model,)
+    assert result.resolved_providers == (provider,)
 
 
 @pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)

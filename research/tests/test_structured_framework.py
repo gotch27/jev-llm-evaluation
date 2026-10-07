@@ -6,6 +6,7 @@ import math
 from dataclasses import replace
 from pathlib import Path
 
+import httpx2
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -20,7 +21,12 @@ from thesis_research.benchmark.plan import load_benchmark_plan
 from thesis_research.benchmark.report import generate_report
 from thesis_research.benchmark.runner import resume_benchmark, run_benchmark
 from thesis_research.benchmark.types import CohortSpec
-from thesis_research.clients import CallRecord, DecisionResult, UsageTotals
+from thesis_research.clients import (
+    CallRecord,
+    DecisionResult,
+    UsageTotals,
+    VercelSystemOneDecisionClient,
+)
 from thesis_research.config import load_task_config
 from thesis_research.datasets import (
     ChoiceReference,
@@ -353,6 +359,75 @@ def test_malformed_answers_fail_consistently_in_progress_and_evaluation(
         examples, schema, read_prediction_jsonl(predictions.getvalue().encode())
     )
     assert metrics["prediction_counts"]["failed"] == 1
+
+
+def test_model_refusal_is_a_failed_prediction_with_billed_usage_and_raw_diagnostics(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
+    task = build_structured_task(
+        load_task_config(write_noul_task(tmp_path / "noul.toml")), NoulReferenceSchema()
+    )
+    examples = [
+        DatasetExample(
+            f"train:{index}", {"passage": str(index), "question": "Question"}, NoulReference(True)
+        )
+        for index in (1, 2)
+    ]
+    requests = []
+
+    def reply(request):
+        requests.append(json.loads(request.content))
+        answer = (
+            {"type": "refusal", "name": task.question_id}
+            if len(requests) == 1
+            else {"type": "noul", "noul": 0.9}
+        )
+        return httpx2.Response(
+            200,
+            json={
+                "model": "openai/gpt-6-luna-decisions",
+                "answers": {task.question_id: answer},
+                "usage": {"input_tokens": 12, "output_tokens": 0},
+                "provider_metadata": {"gateway": {"cost": "0.0001"}},
+            },
+        )
+
+    predictions = io.StringIO()
+    decisions = io.StringIO()
+
+    async def run():
+        async with VercelSystemOneDecisionClient(
+            "openai/gpt-6-luna-decisions", "openai", _transport=httpx2.MockTransport(reply)
+        ) as client:
+            return await predict_examples(
+                client,
+                examples,
+                task,
+                NoulReferenceSchema(),
+                predictions,
+                decisions,
+                max_concurrency=1,
+                answer_output_mode="native_probabilities",
+            )
+
+    summary = asyncio.run(run())
+    assert len(requests) == 2
+    assert summary["successful"] == summary["failed"] == 1
+    assert summary["usage"]["cost_usd"] == 0.0002
+    assert summary["usage"]["input_tokens"] == 24
+    assert summary["usage"]["retries"] == 0
+    rows = read_prediction_jsonl(predictions.getvalue().encode())
+    assert rows["train:1"]["error"].startswith("ModelRefusal:")
+    assert rows["train:2"]["probability"] == 0.9
+    decision = json.loads(decisions.getvalue().splitlines()[0])["decision"]
+    assert decision["answer_output_mode"] == "native_probabilities"
+    refusal = decision["errors"][task.question_id]
+    assert refusal["error_type"] == "ModelRefusal"
+    assert refusal["diagnostics"]["answer"]["type"] == "refusal"
+    assert decision["calls"][0]["raw"]["answers"][task.question_id]["type"] == "refusal"
+    metrics, _ = evaluate_structured(examples, NoulReferenceSchema(), rows)
+    assert metrics["prediction_counts"] == {"valid": 1, "failed": 1, "missing": 0, "invalid": 0}
 
 
 def test_serializes_noul_and_score_predictions(tmp_path):

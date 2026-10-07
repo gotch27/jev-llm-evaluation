@@ -898,13 +898,23 @@ def test_system_one_training_smokes_match_routes_and_preserve_banking77_variants
     assert criteria.models == without.models == boolq.models
     for plan in (criteria, without, boolq):
         assert plan.cohort.split == "train"
+        assert plan.cohort.seed == 20260920
+        assert plan.execution.example_concurrency == 1
+        assert plan.execution.model_concurrency == 3
         assert plan.baseline.id == "jev"
         assert plan.llm_output is None
         assert all(model.backend == "system_one" for model in plan.models)
+        assert [model.id for model in plan.models] == [
+            "jev",
+            "laya",
+            "liquid-d1",
+            "gpt-6-luna-decisions",
+        ]
         assert [(model.model, model.provider) for model in plan.models] == [
             ("typesafe-ai/jev", "typesafe-ai"),
             ("convaiinnovations/laya", "boundless"),
             ("liquid/d1", "liquid"),
+            ("openai/gpt-6-luna-decisions", "openai"),
         ]
     assert criteria.cohort.size == without.cohort.size == 1
     assert boolq.cohort.size == 2

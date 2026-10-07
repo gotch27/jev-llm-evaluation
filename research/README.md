@@ -72,11 +72,17 @@ The same client supports these routes, with the configured provider pinned using
 | Jev | `typesafe-ai/jev` | `typesafe-ai` |
 | Laya | `convaiinnovations/laya` | `boundless` |
 | Liquid d1 | `liquid/d1` | `liquid` |
+| GPT-6 Luna Decisions | `openai/gpt-6-luna-decisions` | `openai` |
 
 These routes use [Vercel's compatible TypeSafe endpoint](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe)
 and [System One model routing](https://vercel.com/i/jev-vs-laya-vs-liquid-d1). Use Laya's standard
 ID; pricing is taken from actual responses rather than promotional assumptions. Native Choice,
 Noul, and Score answers and the full raw response are preserved.
+
+[GPT-6 Luna Decisions](https://vercel.com/ai-gateway/models/gpt-6-luna-decisions) uses the same
+TypeSafe SDK, endpoint, and `AI_GATEWAY_API_KEY`; no direct OpenAI client or additional credential
+is needed. Per-question refusals are recorded as `ModelRefusal` errors, retaining other successful
+answers, billed usage, cost, and raw diagnostics. Refusals do not trigger retries.
 
 For an LLM, supply a canonical Vercel model ID and pin one upstream provider. Virtual models and
 routing aliases are rejected. Prefer a versioned model ID when Vercel offers one. The selected
@@ -346,7 +352,8 @@ reasoning_effort = "low"
 same training split, random seed, cohort size, models, and LLM output mode, so both smoke plans
 select the same example and differ only in the task definition.
 
-Three System One-only connectivity plans compare Jev, Laya, and Liquid d1, with Jev as baseline:
+Three System One-only connectivity plans compare Jev, Laya, Liquid d1, and GPT-6 Luna Decisions,
+with Jev as baseline:
 
 - `experiments/intent_classification/benchmarks/banking77-system-one-smoke.toml`: one training
   example with all 77 intent criteria.
@@ -360,6 +367,15 @@ all 77 BANKING77 options. Laya's large-option behavior is an experimental limita
 the framework does not shortlist options or introduce a hierarchy. To run a single model, retain
 its `[[models]]` table and set `baseline_model_id` to its ID.
 
+Run these four-model training checks from `research/` (each command makes billable model calls
+and opens the generated report):
+
+```bash
+uv run thesis-research benchmark --plan experiments/intent_classification/benchmarks/banking77-system-one-smoke.toml --open-report
+uv run thesis-research benchmark --plan experiments/intent_classification/benchmarks/banking77-without-criteria-system-one-smoke.toml --open-report
+uv run thesis-research benchmark --plan experiments/boolean_question_answering/benchmarks/boolq-system-one-smoke.toml --open-report
+```
+
 Live validation on 2026-10-06 used 15 HTTP attempts. Jev and Liquid d1 accepted all three smoke
 plans and a combined Choice/Noul/Score request. Laya accepted BoolQ and the combined request,
 but Boundless returned HTTP 422 for both full 77-option BANKING77 variants. The gateway did not
@@ -367,6 +383,13 @@ identify the precise input limit. These failures remain recorded; BANKING77 comp
 Laya is not confirmed. Raw requests, responses, usage, costs, errors, and source snapshots are
 saved under `outputs/validation/system-one/`. Connectivity checks do not establish comparative
 model quality.
+
+OpenAI-only live validation on 2026-10-07 accepted both full 77-option BANKING77 variants,
+two BoolQ training examples, and a combined Choice/Noul/Score request. All five initial requests
+succeeded without retries (five HTTP attempts; limit 15), with total reported cost $0.0006794.
+The responses, frozen inputs, usage, routing, errors, and source provenance are saved separately
+under `outputs/validation/openai-decisions/`. These checks confirm account access and request
+compatibility, not comparative quality. Refusal handling was verified with offline HTTP fixtures.
 
 `banking77-timing-pilot.toml` is a separate training-only timing-method check using 10 random
 examples. It runs models and examples sequentially and measures every selected example, including

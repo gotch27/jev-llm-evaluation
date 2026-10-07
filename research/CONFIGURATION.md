@@ -215,10 +215,26 @@ Each model table accepts:
 | `reasoning_effort` | optional, LLM only | `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`. |
 
 System One models must omit `reasoning_effort`. The routes are Jev (`typesafe-ai/jev`, provider
-`typesafe-ai`), Laya (`convaiinnovations/laya`, provider `boundless`), and Liquid d1 (`liquid/d1`,
-provider `liquid`). Use Laya's standard ID. All models pin their provider with `gateway.only`.
+`typesafe-ai`), Laya (`convaiinnovations/laya`, provider `boundless`), Liquid d1 (`liquid/d1`,
+provider `liquid`), and GPT-6 Luna Decisions (`openai/gpt-6-luna-decisions`, provider `openai`).
+Use Laya's standard ID. All models pin their provider with `gateway.only`.
 LLMs require native structured output support; virtual aliases and provider fallback lists are
 rejected. Historical frozen `jev` plans require their original code revision for resume.
+
+The three `*-system-one-smoke.toml` plans include all four routes and retain Jev as baseline.
+GPT-6 Luna Decisions uses the existing TypeSafe endpoint and Vercel credential:
+
+```toml
+[[models]]
+id = "gpt-6-luna-decisions"
+backend = "system_one"
+model = "openai/gpt-6-luna-decisions"
+provider = "openai"
+```
+
+System One responses can refuse individual questions. These become `ModelRefusal` errors with
+the raw refusal in their diagnostics; successful answers and billed usage remain recorded.
+An HTTP-successful refusal is not retried.
 
 ## Prediction records and metrics
 
