@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Yelp · Macedonian translation review</title>
+<style>
+:root{--ink:#1d2e32;--muted:#637477;--line:#dbe3df;--paper:#f6f8f4;--green:#116c5c;--soft:#e5f2ed;--amber:#995b08;--yellow:#fff0bd;--red:#ac3c3c;--blue:#346480}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.45}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #9acfc0;outline-offset:2px}
+.top{padding:26px 34px 20px;background:white;border-bottom:1px solid var(--line)}.eyebrow{font-size:11px;font-weight:750;letter-spacing:.17em;text-transform:uppercase;color:var(--green)}h1{font-size:30px;letter-spacing:-.04em;margin:5px 0 4px;line-height:1.2}.intro{color:var(--muted);margin:8px 0 0;max-width:900px}.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px}.button{border:1px solid #b9c9c2;border-radius:8px;padding:8px 13px;background:white;color:var(--ink);font-weight:620}.button.primary{background:var(--green);border-color:var(--green);color:white}.button.warn{color:var(--amber);border-color:#d7be88}.button.small{padding:5px 10px;font-size:13px}.save-note{margin-left:auto;font-size:12px;color:var(--muted)}.stats{display:flex;gap:24px;margin-top:17px;flex-wrap:wrap}.stat b{font-size:22px;letter-spacing:-.04em;display:block}.stat span{font-size:12px;color:var(--muted)}.progress{height:5px;margin-top:15px;background:#e8eeea;border-radius:9px;overflow:hidden}.progress div{height:100%;background:var(--green);width:0;transition:width .2s}
+.controls{padding:18px 34px;display:grid;grid-template-columns:minmax(190px,1fr) repeat(4,minmax(120px,180px));gap:12px;border-bottom:1px solid var(--line)}label.filter{font-size:11px;color:var(--muted);font-weight:650;display:flex;flex-direction:column;gap:5px}input,select{border:1px solid #c8d4ce;background:white;border-radius:7px;padding:8px 10px;width:100%;color:var(--ink)}.workspace{display:grid;grid-template-columns:310px minmax(0,1fr);height:calc(100vh - 353px);min-height:560px}.queue{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:#f0f4ef}.queue-head{padding:14px 17px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.queue-list{overflow:auto;flex:1;padding:8px}.queue-item{display:block;width:100%;text-align:left;border:1px solid transparent;border-radius:9px;background:transparent;padding:12px;margin-bottom:5px;color:var(--ink)}.queue-item:hover{background:#e5eee8}.queue-item.active{background:white;border-color:#86b5a5;box-shadow:0 2px 8px #163c2610}.queue-meta{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px}.queue-title{font-size:13px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.queue-flags{font-size:10px;color:var(--amber);margin-top:7px}.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#b4beb8;margin-right:5px}.status-dot.approved{background:var(--green)}.status-dot.needs_fix{background:#c68c2c}.status-dot.corrected{background:var(--blue)}.queue-footer{padding:10px 13px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted)}
+.detail{overflow:auto;padding:23px 28px 35px;background:#fbfcf9}.detail-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.detail h2{margin:0;font-size:20px;letter-spacing:-.02em}.meta{font-size:12px;color:var(--muted);margin-top:5px}.navigation{display:flex;gap:8px}.badges{display:flex;gap:6px;flex-wrap:wrap;margin:15px 0}.badge{display:inline-block;font-size:11px;padding:4px 8px;border-radius:6px;background:var(--yellow);color:var(--amber);font-weight:600}.flag-help{font-size:13px;color:#725923;background:#fff8e6;border:1px solid #ecdfba;padding:12px 15px;border-radius:9px;margin:12px 0 18px}.flag-help p{margin:4px 0}.texts{display:grid;grid-template-columns:1fr 1fr;gap:16px}.text-card{background:white;border:1px solid var(--line);border-radius:11px;min-width:0;overflow:hidden}.card-header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;font-weight:650;font-size:13px}.card-header small{font-weight:400;font-size:11px;color:var(--muted)}.text-body{padding:18px;font-size:16px;line-height:1.85;white-space:pre-wrap;overflow-wrap:anywhere;min-height:210px}.text-body mark{background:var(--yellow);color:inherit;padding:0 2px;border-radius:3px}.text-body mark.foreign{background:#ffe0df;color:#8b2222}.number-panel{margin-top:12px;padding:10px 12px;background:#edf3ef;border-radius:7px;font-size:12px;color:var(--muted);overflow-wrap:anywhere}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:21px}.decision{font-size:12px;font-weight:650;padding:6px 10px;border-radius:6px;background:#e7eeea;margin-top:10px;display:inline-block}.decision.approved{background:#d9eee3;color:#236749}.decision.needs_fix{background:#ffedc8;color:#86540e}.decision.corrected{background:#e1edf5;color:#315d7a}.notes-label{display:block;font-size:12px;font-weight:650;margin:16px 0 6px}textarea{resize:vertical;min-height:70px;width:100%;padding:11px 12px;border:1px solid #c8d4ce;border-radius:8px;background:white;color:var(--ink);line-height:1.65}.edit-box{padding:14px;background:#edf3f6;border:1px solid #c9dbe4;border-radius:9px;margin-top:14px}.edit-box textarea{min-height:200px}.edit-box p,.footnote{font-size:12px;color:var(--muted)}.footnote{margin-top:18px}.empty{padding:80px 25px;text-align:center;color:var(--muted)}.hidden{display:none!important}details{font-size:12px;color:var(--muted);margin-top:20px}details p{overflow-wrap:anywhere}.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:white;border-radius:9px;padding:12px 18px;box-shadow:0 5px 30px #0002;font-size:13px;z-index:10}.switch{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-top:15px}.switch input{width:auto}
+@media(min-width:1500px){.detail{padding-left:40px;padding-right:40px}.text-body{font-size:17px}}@media(max-width:1000px){.controls{grid-template-columns:1fr 1fr 1fr}.filter:first-child{grid-column:span 2}.workspace{grid-template-columns:250px 1fr}.texts{grid-template-columns:1fr}.top,.controls{padding-left:20px;padding-right:20px}.detail{padding:20px}.save-note{margin-left:0;width:100%}}@media(max-width:650px){.top{padding:20px 16px}h1{font-size:25px}.stats{gap:20px}.controls{padding:14px 16px;grid-template-columns:1fr 1fr}.filter:first-child{grid-column:span 2}.workspace{height:auto;display:block;min-height:0}.queue{height:320px;border-right:0;border-bottom:1px solid var(--line)}.detail{overflow:visible;padding:20px 16px}.detail-head{flex-direction:column}.text-body{font-size:15px}.save-note{font-size:11px}}
+</style>
+</head>
+<body>
+<header class="top">
+ <div class="eyebrow">Yelp / Translation quality review</div>
+ <h1>English → Macedonian</h1>
+ <p class="intro">Every flagged review, side by side. A flag asks you to check something; it does not prove the translation is wrong.</p>
+ <div class="toolbar"><button class="button primary" id="export">Export review decisions</button><button class="button" id="import">Import saved decisions</button><input type="file" id="import-file" accept=".json,application/json" class="hidden"><span class="save-note" id="save-note" role="status"></span></div>
+ <div class="stats"><div class="stat"><b id="total"></b><span>flagged reviews</span></div><div class="stat"><b id="reviewed">0</b><span>reviewed</span></div><div class="stat"><b id="approved">0</b><span>accepted</span></div><div class="stat"><b id="needs">0</b><span>need correction</span></div><div class="stat"><b id="corrected">0</b><span>corrections saved</span></div></div>
+ <div class="progress" aria-label="Review completion"><div id="progress"></div></div>
+</header>
+<section class="controls" aria-label="Review filters">
+ <label class="filter">Search text or review ID<input id="search" type="search" placeholder="Search English or Macedonian…"></label>
+ <label class="filter">Flag<select id="flag"><option value="all">All flags</option></select></label>
+ <label class="filter">Review status<select id="status"><option value="all">All statuses</option><option value="unreviewed">Unreviewed</option><option value="approved">Accepted</option><option value="needs_fix">Needs correction</option><option value="corrected">Correction saved</option></select></label>
+ <label class="filter">Rating<select id="stars"><option value="all">All ratings</option><option value="1">1 star</option><option value="2">2 stars</option><option value="3">3 stars</option><option value="4">4 stars</option><option value="5">5 stars</option></select></label>
+ <label class="filter">Dataset split<select id="split"><option value="all">All splits</option><option value="train">Training</option><option value="validation">Validation</option><option value="calibration">Calibration</option><option value="test">Test</option></select></label>
+</section>
+<main class="workspace">
+ <aside class="queue" aria-label="Flagged reviews"><div class="queue-head"><span id="results"></span><button class="button small" id="clear">Clear filters</button></div><div class="queue-list" id="queue-list"></div><div class="queue-footer"><button class="button small" id="page-prev">← Page</button><span id="page-label"></span><button class="button small" id="page-next">Page →</button></div></aside>
+ <section class="detail" id="detail" aria-label="Selected review">
+  <div class="detail-head"><div><h2 id="review-id"></h2><div class="meta" id="review-meta"></div></div><div class="navigation"><button class="button small" id="prev">← Previous</button><button class="button small" id="next">Next →</button></div></div>
+  <div class="badges" id="badges"></div><div class="flag-help" id="flag-help"></div>
+  <div class="texts"><article class="text-card"><div class="card-header">English original<small id="en-length"></small></div><div class="text-body" id="english" lang="en"></div></article><article class="text-card"><div class="card-header">Macedonian translation<small id="mk-length"></small></div><div class="text-body" id="macedonian" lang="mk"></div></article></div>
+  <div class="number-panel" id="number-panel"></div><label class="switch"><input type="checkbox" id="highlight" checked>Highlight digits and unexpected Cyrillic letters</label>
+  <div class="actions"><button class="button primary" id="accept">Accept translation</button><button class="button warn" id="needs-fix">Needs correction</button><button class="button" id="edit">Edit translation</button><button class="button" id="reset">Mark unreviewed</button></div>
+  <div id="decision" class="decision"></div>
+  <div class="edit-box hidden" id="edit-box"><strong>Suggested correction</strong><p>The original dataset stays unchanged. Save your correction here, then export your decisions.</p><textarea id="edit-text" lang="mk" aria-label="Corrected Macedonian translation"></textarea><div class="actions"><button class="button primary" id="save-edit">Save correction</button><button class="button" id="cancel-edit">Cancel</button></div></div>
+  <label class="notes-label" for="notes">Your review notes</label><textarea id="notes" placeholder="For example: quantity preserved, but the number is written as a word."></textarea>
+  <p class="footnote">Decisions and notes save in this browser when storage is available. Export a JSON backup before closing. Nothing is sent online or written back to your dataset.</p>
+  <details><summary>Snapshot and source details</summary><p id="snapshot"></p><p id="source"></p></details>
+ </section>
+ <div class="empty hidden" id="empty">No reviews match these filters. Try clearing the filters.</div>
+</main>
+<div id="toast" class="toast hidden" role="status"></div>
+<script id="review-data" type="application/json">__REVIEW_DATA__</script>
+<script>
+"use strict";
+const data=JSON.parse(document.getElementById("review-data").textContent);
+const $=id=>document.getElementById(id);
+const explanations={
+ check_numbers:{name:"Numbers changed",help:"Digit groups differ. A number written as a Macedonian word can trigger this even when the quantity is preserved. Check quantities, dates, prices and ratings."},
+ check_non_macedonian_cyrillic:{name:"Unexpected Cyrillic",help:"Letters normally used in other Cyrillic alphabets were found. Check whether they are a spelling error or an intentionally preserved foreign name or quotation."},
+ check_possible_omission:{name:"Possible omission",help:"The translation is less than half the English character length. Check whether sentences or important details were omitted; character length alone cannot establish an error."},
+ no_cyrillic:{name:"No Cyrillic",help:"The translation contains no Cyrillic letters. Check whether ordinary English was left untranslated. Names or symbols alone can be legitimate."},
+ unchanged:{name:"Unchanged text",help:"The translation is identical to the English original. Check whether it should have been translated."},
+ check_length:{name:"Unusually long",help:"The translation is more than four times the English length. Check for additions, repetition or commentary."}
+};
+const statusNames={unreviewed:"Unreviewed",approved:"Accepted",needs_fix:"Needs correction",corrected:"Correction saved"};
+const recordMap=new Map(data.records.map(r=>[r.id,r]));
+const storageKey="yelp-review-v1:"+data.fingerprint;
+let decisions={},filtered=[],activeId=null,page=0,storageOK=true,renderedId=null;
+const pageSize=50;
+function cleanDecision(value){
+ if(!value||typeof value!=="object"||!Object.hasOwn(statusNames,value.status))throw new Error("Invalid review decision");
+ if(typeof value.notes!=="string"||value.notes.length>100000)throw new Error("Invalid notes");
+ if(value.corrected_text_mk!==undefined&&(typeof value.corrected_text_mk!=="string"||value.corrected_text_mk.length>100000))throw new Error("Invalid correction");
+ if(value.status==="corrected"&&!value.corrected_text_mk?.trim())throw new Error("A saved correction is empty");
+ return {status:value.status,notes:value.notes,corrected_text_mk:value.corrected_text_mk||"",updated_at:typeof value.updated_at==="string"?value.updated_at:new Date().toISOString()};
+}
+try{const saved=JSON.parse(localStorage.getItem(storageKey)||"{}");for(const [id,value] of Object.entries(saved)){if(recordMap.has(id))decisions[id]=cleanDecision(value)}}catch(e){storageOK=false}
+function decision(id){return decisions[id]||{status:"unreviewed",notes:"",corrected_text_mk:""}}
+let toastTimer;
+function toast(message){$("toast").textContent=message;$("toast").classList.remove("hidden");clearTimeout(toastTimer);toastTimer=setTimeout(()=>$("toast").classList.add("hidden"),3500)}
+function save(){try{localStorage.setItem(storageKey,JSON.stringify(decisions));storageOK=true}catch(e){storageOK=false}$("save-note").textContent=storageOK?"Saved locally in this browser · Export a backup":"Browser storage unavailable · Export to keep your decisions";renderStats()}
+function renderStats(){const counts={approved:0,needs_fix:0,corrected:0};for(const value of Object.values(decisions)){if(Object.hasOwn(counts,value.status))counts[value.status]++}const reviewed=counts.approved+counts.needs_fix+counts.corrected;$("total").textContent=data.records.length.toLocaleString();$("reviewed").textContent=reviewed.toLocaleString();$("approved").textContent=counts.approved;$("needs").textContent=counts.needs_fix;$("corrected").textContent=counts.corrected;$("progress").style.width=(data.records.length?100*reviewed/data.records.length:0)+"%"}
+for(const [flag,count] of Object.entries(data.flag_counts)){const option=document.createElement("option");option.value=flag;option.textContent=(explanations[flag]?.name||flag)+" · "+count;$("flag").append(option)}
+function applyFilters(preferredId=activeId){
+ const search=$("search").value.toLocaleLowerCase().trim(),flag=$("flag").value,status=$("status").value,stars=$("stars").value,split=$("split").value;
+ filtered=data.records.filter(r=>(flag==="all"||r.review_flags.includes(flag))&&(status==="all"||decision(r.id).status===status)&&(stars==="all"||r.stars===Number(stars))&&(split==="all"||r.split===split)&&(!search||(r.id+" "+r.text_en+" "+r.text_mk+" "+decision(r.id).notes).toLocaleLowerCase().includes(search)));
+ activeId=filtered.some(r=>r.id===preferredId)?preferredId:(filtered[0]?.id||null);page=activeId?Math.floor(filtered.findIndex(r=>r.id===activeId)/pageSize):0;renderList();renderDetail();
+}
+function renderList(){
+ const list=$("queue-list");list.replaceChildren();$("results").textContent=filtered.length.toLocaleString()+" matching reviews";
+ const pages=Math.max(1,Math.ceil(filtered.length/pageSize));page=Math.min(page,pages-1);
+ for(const r of filtered.slice(page*pageSize,(page+1)*pageSize)){
+  const button=document.createElement("button");button.className="queue-item"+(r.id===activeId?" active":"");button.setAttribute("aria-pressed",String(r.id===activeId));button.dataset.reviewId=r.id;
+  const meta=document.createElement("div");meta.className="queue-meta";
+  const left=document.createElement("span"),dot=document.createElement("span");dot.className="status-dot "+decision(r.id).status;left.append(dot,document.createTextNode(r.stars+" stars · "+r.split));const right=document.createElement("span");right.textContent=r.id.replace("yelp-","");meta.append(left,right);
+  const title=document.createElement("div");title.className="queue-title";title.textContent=r.text_en;
+  const flags=document.createElement("div");flags.className="queue-flags";flags.textContent=r.review_flags.map(f=>explanations[f]?.name||f).join(" · ");button.append(meta,title,flags);
+  button.addEventListener("click",()=>{activeId=r.id;renderList();renderDetail()});list.append(button)
+ }
+ $("page-label").textContent=(page+1)+" / "+pages;$("page-prev").disabled=page===0;$("page-next").disabled=page>=pages-1;
+}
+function highlighted(target,text){target.replaceChildren();if(!$("highlight").checked){target.textContent=text;return}const pattern=/\p{Nd}+|[ъыёэщЪЫЁЭЩ]/gu;let last=0;for(const match of text.matchAll(pattern)){target.append(document.createTextNode(text.slice(last,match.index)));const mark=document.createElement("mark");mark.textContent=match[0];if(/[ъыёэщЪЫЁЭЩ]/u.test(match[0]))mark.className="foreign";target.append(mark);last=match.index+match[0].length}target.append(document.createTextNode(text.slice(last)))}
+function digitDifference(a,b){const counts=text=>{const out=new Map();for(const digit of text.match(/\p{Nd}+/gu)||[])out.set(digit,(out.get(digit)||0)+1);return out};const left=counts(a),right=counts(b);const excess=(x,y)=>[...x].flatMap(([token,count])=>Array(Math.max(0,count-(y.get(token)||0))).fill(token));return [excess(left,right),excess(right,left)]}
+function renderDetail(){
+ const r=recordMap.get(activeId);$("detail").classList.toggle("hidden",!r);$("empty").classList.toggle("hidden",!!r);if(!r)return;
+ if(renderedId!==activeId){$("detail").scrollTop=0;renderedId=activeId}
+ const d=decision(r.id),index=filtered.findIndex(x=>x.id===r.id);
+ $("review-id").textContent=r.id;$("review-meta").textContent=r.stars+"-star source rating · "+r.split+" · Review "+(index+1)+" of "+filtered.length+" matches";
+ $("prev").disabled=index===0;$("next").disabled=index===filtered.length-1;
+ $("badges").replaceChildren();$("flag-help").replaceChildren();
+ for(const flag of r.review_flags){const info=explanations[flag]||{name:flag,help:"Check this flagged translation."};const badge=document.createElement("span");badge.className="badge";badge.textContent=info.name;$("badges").append(badge);const paragraph=document.createElement("p");const strong=document.createElement("strong");strong.textContent=info.name+": ";paragraph.append(strong,document.createTextNode(info.help));$("flag-help").append(paragraph)}
+ highlighted($("english"),r.text_en);highlighted($("macedonian"),r.text_mk);$("en-length").textContent=r.text_en.length.toLocaleString()+" characters";$("mk-length").textContent=r.text_mk.length.toLocaleString()+" characters";
+ const [enOnly,mkOnly]=digitDifference(r.text_en,r.text_mk);$("number-panel").classList.toggle("hidden",!r.review_flags.includes("check_numbers"));$("number-panel").textContent="Digit groups only in English: "+(enOnly.join(", ")||"none")+"  ·  Only in Macedonian: "+(mkOnly.join(", ")||"none")+". These are occurrences, not a semantic comparison of quantities.";
+ $("decision").className="decision "+d.status;$("decision").textContent=statusNames[d.status]+(d.corrected_text_mk?" · A suggested correction is saved":"");$("notes").value=d.notes;$("edit-box").classList.add("hidden");$("edit-text").value=d.corrected_text_mk||r.text_mk;
+ $("snapshot").textContent="Snapshot: "+new Date(data.updated_at).toLocaleString(undefined,{timeZone:"Europe/Skopje"})+" (Europe/Skopje). "+data.translated_rows.toLocaleString()+" translated reviews; "+data.missing_rows+" missing. Model: "+data.model+". Review fingerprint: "+data.fingerprint;
+ $("source").textContent="Original flagged file: "+data.source_directory+"/review.jsonl. This HTML contains all "+data.records.length+" flagged reviews from that snapshot. Counts include multiple flags on some reviews.";
+}
+function updateDecision(status,correction){if(!activeId)return;const id=activeId,previous=decision(id);decisions[id]={status,notes:$("notes").value,corrected_text_mk:correction??previous.corrected_text_mk,updated_at:new Date().toISOString()};save();applyFilters(id)}
+$("accept").addEventListener("click",()=>{if(decision(activeId).corrected_text_mk){toast("A correction is saved. Use Mark unreviewed to clear it before accepting the original.");return}updateDecision("approved");toast("Original translation accepted")});
+$("needs-fix").addEventListener("click",()=>{updateDecision("needs_fix");toast("Marked for correction")});
+$("reset").addEventListener("click",()=>{updateDecision("unreviewed","");toast("Marked unreviewed; suggested correction cleared")});
+$("edit").addEventListener("click",()=>{$("edit-box").classList.remove("hidden");$("edit-text").focus()});$("cancel-edit").addEventListener("click",()=>{$("edit-box").classList.add("hidden");$("edit-text").value=decision(activeId).corrected_text_mk||recordMap.get(activeId).text_mk});
+$("save-edit").addEventListener("click",()=>{const text=$("edit-text").value.trim();if(!text){toast("A correction cannot be empty");return}updateDecision("corrected",text);toast("Suggested correction saved locally")});
+$("notes").addEventListener("input",()=>{if(!activeId)return;decisions[activeId]={...decision(activeId),notes:$("notes").value,updated_at:new Date().toISOString()};save()});
+for(const id of ["flag","status","stars","split"])$(id).addEventListener("change",()=>applyFilters());let searchTimer;$("search").addEventListener("input",()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>applyFilters(),180)});
+$("clear").addEventListener("click",()=>{$("search").value="";for(const id of ["flag","status","stars","split"])$(id).value="all";applyFilters()});$("highlight").addEventListener("change",renderDetail);
+function move(direction){const index=filtered.findIndex(r=>r.id===activeId),next=filtered[index+direction];if(next){activeId=next.id;page=Math.floor((index+direction)/pageSize);renderList();renderDetail();$("detail").scrollTop=0}}$("prev").addEventListener("click",()=>move(-1));$("next").addEventListener("click",()=>move(1));
+function movePage(direction){page+=direction;activeId=filtered[page*pageSize]?.id||activeId;renderList();renderDetail();$("queue-list").scrollTop=0}$("page-prev").addEventListener("click",()=>movePage(-1));$("page-next").addEventListener("click",()=>movePage(1));
+$("export").addEventListener("click",()=>{const entries=Object.entries(decisions).filter(([id,d])=>recordMap.has(id)&&(d.status!=="unreviewed"||d.notes||d.corrected_text_mk)).map(([id,d])=>({id,...d,source_hash:recordMap.get(id).duplicate_group}));const output={format:"yelp_translation_review_v1",fingerprint:data.fingerprint,profile:data.profile,source_sha256:data.source_sha256,exported_at:new Date().toISOString(),decisions:entries};const url=URL.createObjectURL(new Blob([JSON.stringify(output,null,2)],{type:"application/json;charset=utf-8"}));const link=document.createElement("a");link.href=url;link.download="yelp-review-decisions-"+new Date().toISOString().slice(0,10)+".json";document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast("Exported "+entries.length+" review decisions")});
+$("import").addEventListener("click",()=>$("import-file").click());$("import-file").addEventListener("change",async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>20000000)throw new Error("Review file is too large");const input=JSON.parse(await file.text());if(input.format!=="yelp_translation_review_v1"||input.fingerprint!==data.fingerprint||!Array.isArray(input.decisions))throw new Error("This review file belongs to a different dataset snapshot");const loaded={...decisions};const seen=new Set();for(const entry of input.decisions){const record=recordMap.get(entry.id);if(!record||seen.has(entry.id)||entry.source_hash!==record.duplicate_group)throw new Error("A review ID or source hash does not match");seen.add(entry.id);loaded[entry.id]=cleanDecision(entry)}decisions=loaded;save();applyFilters();toast("Imported "+input.decisions.length+" decisions; matching IDs updated")}catch(e){toast("Import failed: "+e.message)}finally{event.target.value=""}});
+save();applyFilters();
+</script>
+</body>
+</html>

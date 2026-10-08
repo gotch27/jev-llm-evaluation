@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+.pipeline.lock
+raw/
+source/
+cache/
+logs/
+translated/
+model-catalog.json
+review/flagged-reviews.html
+review/*-preview.png
