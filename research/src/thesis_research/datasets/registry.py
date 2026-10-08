@@ -4,6 +4,7 @@ from pathlib import Path
 
 from thesis_research.datasets.banking77 import Banking77Adapter
 from thesis_research.datasets.boolq import BoolQAdapter
+from thesis_research.datasets.releases import load_dataset_release
 from thesis_research.datasets.types import (
     ChoiceReference,
     ChoiceReferenceSchema,
@@ -28,9 +29,23 @@ def get_dataset_adapter(dataset_id: str) -> DatasetAdapter:
         raise ValueError(f"Unsupported dataset: {dataset_id}") from error
 
 
-def prepare_dataset(root: Path, dataset_id: str, revision: str) -> Path:
-    """Prepare a registered dataset revision."""
-    return get_dataset_adapter(dataset_id).prepare(root, revision)
+def prepare_dataset(
+    root: Path, dataset_id: str, revision: str, *, version: str | None = None
+) -> Path:
+    """Verify a frozen release or prepare an official source snapshot."""
+    if version is not None:
+        from thesis_datasets.releases import load_release, release_directory
+
+        load_release(root, dataset_id, version, source_revision=revision)
+        return release_directory(root, dataset_id, version)
+    if dataset_id in {"yelp", "snips"}:
+        raise ValueError(f"Dataset {dataset_id} requires an explicit published dataset version")
+    directory = get_dataset_adapter(dataset_id).prepare(root, revision)
+    if dataset_id not in {"banking77", "boolq"}:
+        return directory
+    from thesis_datasets.publish import publish_official_dataset
+
+    return publish_official_dataset(root, dataset_id, revision, root)
 
 
 def load_prepared_dataset(
@@ -38,8 +53,15 @@ def load_prepared_dataset(
     dataset_id: str,
     revision: str,
     split: str,
+    *,
+    version: str | None = None,
 ) -> PreparedDataset:
     """Load one verified split through its registered adapter."""
+    if version is not None:
+        prepared = load_dataset_release(root, dataset_id, revision, version, split)
+        return validate_prepared_dataset(prepared, dataset_id, revision, split)
+    if dataset_id in {"yelp", "snips"}:
+        raise ValueError(f"Dataset {dataset_id} requires an explicit published dataset version")
     adapter = get_dataset_adapter(dataset_id)
     if split not in adapter.supported_splits:
         raise ValueError(

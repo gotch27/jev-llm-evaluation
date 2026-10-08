@@ -22,8 +22,7 @@ build/
 htmlcov/
 
 # Downloaded data and generated runs
-research/data/*
-!research/data/.gitkeep
+research/data/
 research/outputs/*
 !research/outputs/.gitkeep
 

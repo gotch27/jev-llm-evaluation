@@ -2,7 +2,7 @@
 
 The project separates the supervised task from the benchmark execution:
 
-- A **task TOML** pins a registered dataset revision, maps dataset fields into model state, and
+- A **task TOML** pins a dataset source revision and optional prepared version, maps dataset fields into model state, and
   defines one TypeSafe `Choice`, `Noul`, or `Score` question.
 - A **benchmark TOML** selects a dataset split and cohort, the LLM answer mode, concurrency, and
   the System One models and LLMs that receive that same cohort.
@@ -21,6 +21,7 @@ name = "Human-readable task name"
 [dataset]
 id = "registered-dataset-id"
 revision = "immutable-source-revision"
+# For a shared release, also set version to its full 64-character SHA-256 ID.
 
 [state.fields]
 model_state_key = "dataset_source_field"
@@ -31,13 +32,23 @@ id = "stable_answer_key"
 instructions = "Instructions shared by every configured model."
 ```
 
-`dataset.id` selects a Python adapter in `src/thesis_research/datasets/registry.py`.
-`dataset.revision` is passed to that adapter and preserved in the run. The registered datasets are:
+`dataset.revision` identifies the upstream source commit. `dataset.version`, when present,
+selects exactly `../datasets/releases/<id>/<version>/`; it is a full lowercase SHA-256 digest
+covering inputs, targets, split membership, schema, and preparation provenance. Every split is
+verified before loading. No latest-version pointer is followed. Yelp and SNIPS require a version.
+Without it, BANKING77 and BoolQ retain their source-pinned adapter behavior. Supported datasets are:
 
 | Dataset | ID | Supported splits | Reference type |
 | --- | --- | --- | --- |
 | BANKING77 | `banking77` | `train`, `test` | Choice label |
 | BoolQ | `boolq` | `train`, `validation` | Boolean Noul value |
+| Yelp | `yelp` | `train`, `validation`, `calibration`, `test` | Score level 0–4 = stars 1–5 |
+| SNIPS | `snips` | `train`, `heldout` | Seven Choice intents |
+
+Yelp/SNIPS bilingual releases expose `text_en` and `text_mk`. Select one explicitly, such as
+`review = "text_mk"`. Labels, ratings, and translation review flags are kept outside the inputs.
+The checked-in Yelp/SNIPS tasks pin the published snapshot used during this migration. Publish a
+different prepared export as a new version and update a new task file; do not edit a frozen run.
 
 `[state.fields]` maps the keys sent to the model to source fields supplied by the dataset adapter.
 For example, `customer_message = "text"` sends `{"customer_message": row["text"]}`. BoolQ maps

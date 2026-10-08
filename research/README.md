@@ -216,7 +216,9 @@ uv run thesis-research inspect \
 ```
 
 `prepare` and `inspect` read the dataset ID and revision from the selected task, then dispatch to
-its registered adapter. Both commands require `--config`; omission fails before any data work.
+its shared source reader or verified release. Without a version, `prepare` downloads/reuses official
+BANKING77/BoolQ source files and publishes a release. With a version, it only verifies the release.
+Both commands require `--config`; omission fails before any data work.
 `inspect` reads
 the split named by `--split` and prints its reference distribution plus JSON examples. Dataset
 adapters reject unsupported split names.
@@ -225,7 +227,7 @@ adapters reject unsupported split names.
 
 Data comes from [PolyAI's official dataset repository](https://github.com/PolyAI-LDN/task-specific-datasets#banking),
 pinned to commit `57ec275d8078af65b7731c2a98be812d844a6d6b`. The source provides 10,003 training
-examples and 3,080 test examples. Files are stored under `data/banking77/<revision>/`, alongside
+examples and 3,080 test examples. Files are stored under `../datasets/banking77/source/<revision>/`, alongside
 a manifest containing the source, revision, URLs, and SHA-256 checksums. Subsequent preparation
 uses the cached files and verifies checksums. Downloads use a 60-second timeout with no automatic
 retries. If preparation fails, its files remain for inspection; rerunning can complete an
@@ -253,7 +255,7 @@ The training references contain 5,874 `true` and 3,553 `false` values. Validatio
 2,033 `true` and 1,237 `false` values. The pinned adapter verifies these distributions as well as
 the files themselves.
 
-Files and a provenance manifest are stored under `data/boolq/<revision>/`. Preparation validates
+Files and a provenance manifest are stored under `../datasets/boolq/source/<revision>/`. Preparation validates
 the checksum, Parquet schema, row counts, nonempty source fields, and the presence of both boolean
 classes. Stable IDs use the original one-based row position, such as `train:1` and
 `validation:1`. Cached files are verified before reuse; modified files stop loading.
@@ -261,6 +263,39 @@ classes. Stable IDs use the original one-based row position, such as `train:1` a
 The source metadata lists [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
 The labeled validation split is reserved for held-out evaluation because the published test labels
 are unavailable. Training data is used for task development and the two-row smoke cohort.
+
+### Shared Yelp and SNIPS releases
+
+All datasets now live in the top-level `datasets/` project. `uv sync --locked` installs its local
+`thesis-datasets` package. The CLI defaults to `--data-dir ../datasets`; override it explicitly
+when using a copied release root. Source preparation no longer belongs to the benchmark package.
+See [Shared dataset setup](../datasets/README.md) for publication, transfer to a training machine,
+and the common JSONL format. The former `research/data/` folder and its links have been removed.
+
+Yelp and SNIPS tasks require `[dataset].version`, a full SHA-256 identifying an exact prepared
+release. `[dataset].revision` still records the upstream source commit. The bilingual release
+contains both `text_en` and `text_mk`; each task selects one and keeps targets and metadata hidden.
+The benchmark verifies the manifest, every split checksum, IDs, and targets before model calls.
+It records the release version and provenance and reuses the same frozen selection on resume.
+
+Yelp uses Score levels 0–4 corresponding to 1–5 stars; its train, validation, calibration, and test
+splits are preserved. SNIPS uses the seven original Choice intents and preserves train/heldout.
+These local smoke plans use five Yelp training rows or seven SNIPS training rows, one per class:
+
+```sh
+uv run thesis-research inspect --config experiments/review_rating/tasks/yelp-mk.toml \
+  --split train --limit 2
+uv run thesis-research benchmark \
+  --plan experiments/review_rating/benchmarks/yelp-mk-local-smoke.toml --open-report
+uv run thesis-research benchmark \
+  --plan experiments/intent_classification/benchmarks/snips-mk-local-smoke.toml --open-report
+```
+
+Start your TypeSafe-compatible service separately before benchmarking. The plans use
+`http://127.0.0.1:8000` and the existing `laya-base` alias; set a distinct alias/model ID in a new
+plan when testing a fine-tuned checkpoint. An English task/plan is available beside each
+Macedonian one. These example instructions are for training smoke checks, not a finalized thesis
+prompt. No benchmark or training job runs during dataset publication.
 
 ## Generic task definition
 
@@ -338,7 +373,13 @@ from thesis_research.tasks import build_structured_task
 
 config_path = Path("experiments/intent_classification/tasks/banking77.toml")
 config = load_task_config(config_path)
-prepared = load_prepared_dataset(Path("data"), config.dataset.id, config.dataset.revision, "train")
+prepared = load_prepared_dataset(
+    Path("../datasets"),
+    config.dataset.id,
+    config.dataset.revision,
+    "train",
+    version=config.dataset.version,
+)
 task = build_structured_task(config, prepared.reference_schema)
 
 state = task.build_state(prepared.examples[0].state)
@@ -774,7 +815,8 @@ uv run ruff format --check .
 - `experiments/*/tasks/`: versioned dataset, state mapping, question, labels/rubrics, and criteria.
 - `experiments/*/benchmarks/`: dataset split, LLM output, model, cohort, and execution plans.
 - `tests/`: offline tests with synthetic fixtures, not model experiments.
-- `data/` and `outputs/`: ignored dataset downloads and generated records.
+- `../datasets/`: shared source files, translations, and frozen dataset releases.
+- `outputs/`: ignored generated benchmark records.
 
 ```sh
 uv run python -m pytest

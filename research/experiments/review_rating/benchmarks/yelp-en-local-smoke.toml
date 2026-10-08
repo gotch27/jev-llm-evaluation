@@ -1,0 +1,21 @@
+name = "YELP English local Laya training smoke"
+baseline_model_id = "laya-local"
+task_config = "../tasks/yelp-en.toml"
+
+[cohort]
+split = "train"
+strategy = "stratified_random"
+size = 5
+seed = 42
+
+[execution]
+example_concurrency = 1
+model_concurrency = 1
+
+[[models]]
+id = "laya-local"
+backend = "system_one"
+transport = "self_hosted"
+model = "laya-base"
+provider = "local"
+base_url = "http://127.0.0.1:8000"

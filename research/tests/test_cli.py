@@ -50,7 +50,7 @@ def test_cli_passes_terminal_observer_to_benchmark(monkeypatch, capsys):
 
     async def fake_run_benchmark(plan, data, outputs, *, observer, runner_location):
         assert plan == Path("plan.toml")
-        assert data == Path("data")
+        assert data == Path("../datasets")
         assert outputs == Path("outputs/benchmarks")
         assert observer is terminal_observer
         assert runner_location == "local-mac-oslo"
@@ -88,7 +88,7 @@ def test_cli_passes_retry_errors_to_resume(monkeypatch, capsys):
 
     async def fake_resume(run, data, *, observer, runner_location, retry_errors):
         assert run == Path("outputs/benchmarks/run")
-        assert data == Path("data")
+        assert data == Path("../datasets")
         assert observer is terminal_observer
         assert runner_location == "local-mac-oslo"
         assert retry_errors is True

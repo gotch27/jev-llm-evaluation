@@ -70,10 +70,11 @@ ReferenceSchema: TypeAlias = ChoiceReferenceSchema | NoulReferenceSchema | Score
 
 @dataclass(frozen=True)
 class PreparedDataset:
-    """One verified split pinned to an exact source-repository commit.
+    """One verified split pinned to a source revision and optional data release.
 
     The source revision identifies the dataset snapshot, independently of the
     research code revision. Stable example IDs refer to rows in that snapshot.
+    Shared release manifests additionally record the content-addressed prepared version.
     """
 
     dataset_id: str

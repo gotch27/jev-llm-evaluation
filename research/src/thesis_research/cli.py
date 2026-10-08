@@ -17,6 +17,7 @@ from thesis_research.reporting import generate_dashboard
 from thesis_research.terminal import BenchmarkTerminal
 
 DEFAULT_BENCHMARK_OUTPUT = Path("outputs/benchmarks")
+DEFAULT_DATA_DIRECTORY = Path("../datasets")
 
 
 def main() -> None:
@@ -74,6 +75,7 @@ def main() -> None:
                     args.data_dir,
                     config.dataset.id,
                     config.dataset.revision,
+                    version=config.dataset.version,
                 )
             )
             return
@@ -83,6 +85,7 @@ def main() -> None:
             config.dataset.revision,
             args.split,
             args.limit,
+            version=config.dataset.version,
         )
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, f"Error: {error}\n")
@@ -104,7 +107,7 @@ def _build_parser() -> argparse.ArgumentParser:
     source = benchmark.add_mutually_exclusive_group(required=True)
     source.add_argument("--plan", type=Path)
     source.add_argument("--resume", type=Path, metavar="RUN_DIRECTORY")
-    benchmark.add_argument("--data-dir", type=Path, default=Path("data"))
+    benchmark.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIRECTORY)
     benchmark.add_argument("--output-dir", type=Path, default=DEFAULT_BENCHMARK_OUTPUT)
     benchmark.add_argument(
         "--runner-location",
@@ -140,7 +143,7 @@ def _open_dashboard(path: Path) -> None:
 
 def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--data-dir", type=Path, default=Path("data"))
+    parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIRECTORY)
 
 
 def _inspect_data(
@@ -149,10 +152,12 @@ def _inspect_data(
     revision: str,
     split: str,
     limit: int,
+    *,
+    version: str | None = None,
 ) -> None:
     if limit < 0:
         raise ValueError("limit must be nonnegative")
-    prepared = load_prepared_dataset(data, dataset_id, revision, split)
+    prepared = load_prepared_dataset(data, dataset_id, revision, split, version=version)
     distribution: dict[str, int] = {}
     for example in prepared.examples:
         key = reference_class(example.reference)

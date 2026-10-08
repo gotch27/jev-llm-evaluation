@@ -14,13 +14,17 @@ from typesafe_sdk import JSONContent
 
 @dataclass(frozen=True)
 class DatasetConfig:
-    """Identify one registered dataset and immutable source revision."""
+    """Identify a source revision and optionally an exact prepared-data release."""
 
     id: str
     revision: str
+    version: str | None = None
 
     def as_dict(self) -> dict[str, str]:
-        return {"id": self.id, "revision": self.revision}
+        value = {"id": self.id, "revision": self.revision}
+        if self.version is not None:
+            value["version"] = self.version
+        return value
 
 
 @dataclass(frozen=True)
@@ -148,16 +152,24 @@ def _parse_task(value: dict[str, Any]) -> TaskConfig:
     dataset = value["dataset"]
     if not isinstance(dataset, dict):
         raise ValueError("dataset must be a table")
-    _require_fields(dataset, {"id", "revision"}, {"id", "revision"}, "dataset")
+    _require_fields(dataset, {"id", "revision"}, {"id", "revision", "version"}, "dataset")
     return TaskConfig(
         name=_nonempty_string(value["name"], "Task name"),
         dataset=DatasetConfig(
             _nonempty_string(dataset["id"], "dataset id"),
             _nonempty_string(dataset["revision"], "dataset revision"),
+            _dataset_version(dataset["version"]) if "version" in dataset else None,
         ),
         state=_parse_state(value["state"]),
         question=_parse_question(value["question"]),
     )
+
+
+def _dataset_version(value: object) -> str:
+    version = _nonempty_string(value, "dataset version")
+    if len(version) != 64 or any(character not in "0123456789abcdef" for character in version):
+        raise ValueError("dataset version must be a full lowercase SHA-256 digest")
+    return version
 
 
 def _parse_state(value: object) -> StateConfig:

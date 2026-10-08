@@ -690,9 +690,9 @@ def test_boolq_prepare_downloads_both_splits(tmp_path, monkeypatch):
         name = url.rsplit("/", 1)[-1]
         return io.BytesIO((source / name).read_bytes())
 
-    monkeypatch.setattr("thesis_research.datasets.boolq.urlopen", fake_urlopen)
+    monkeypatch.setattr("thesis_datasets.sources.boolq.urlopen", fake_urlopen)
     prepared = prepare_boolq(tmp_path / "download", "fixture-revision")
-    assert prepared == tmp_path / "download" / "boolq" / "fixture-revision"
+    assert prepared == tmp_path / "download" / "boolq" / "source" / "fixture-revision"
     assert (
         len(load_prepared_boolq(tmp_path / "download", "fixture-revision", "validation").examples)
         == 2
@@ -701,13 +701,13 @@ def test_boolq_prepare_downloads_both_splits(tmp_path, monkeypatch):
     def no_network(*args, **kwargs):
         pytest.fail("A verified BoolQ cache must not use the network")
 
-    monkeypatch.setattr("thesis_research.datasets.boolq.urlopen", no_network)
+    monkeypatch.setattr("thesis_datasets.sources.boolq.urlopen", no_network)
     assert prepare_boolq(tmp_path / "download", "fixture-revision") == prepared
 
 
 def test_boolq_rejects_corrupted_pinned_download(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "thesis_research.datasets.boolq.urlopen",
+        "thesis_datasets.sources.boolq.urlopen",
         lambda *args, **kwargs: io.BytesIO(b"not the pinned parquet file"),
     )
     with pytest.raises(ValueError, match="Downloaded BoolQ checksum mismatch"):

@@ -56,7 +56,7 @@ def test_cached_prepare_and_tampering(dataset, monkeypatch):
     def no_network(*args, **kwargs):
         pytest.fail("Cached prepare must not use network")
 
-    monkeypatch.setattr("thesis_research.datasets.banking77.urlopen", no_network)
+    monkeypatch.setattr("thesis_datasets.sources.banking77.urlopen", no_network)
     assert prepare_banking77(dataset.parents[1]) == dataset
     (dataset / "train.csv").write_text("changed")
     with pytest.raises(ValueError, match="Checksum"):
@@ -77,7 +77,7 @@ def test_fresh_download_banking77(dataset, tmp_path, monkeypatch):
     import io
 
     monkeypatch.setattr(
-        "thesis_research.datasets.banking77.urlopen",
+        "thesis_datasets.sources.banking77.urlopen",
         lambda url, timeout: io.BytesIO((dataset / url.rsplit("/", 1)[-1]).read_bytes()),
     )
     fresh = prepare_banking77(tmp_path / "fresh")

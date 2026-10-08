@@ -1561,16 +1561,36 @@ wheels = [
 ]
 
 [[package]]
+name = "thesis-datasets"
+version = "0.1.0"
+source = { editable = "../datasets" }
+
+[package.optional-dependencies]
+parquet = [
+    { name = "pyarrow" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pyarrow", marker = "extra == 'parquet'", specifier = ">=25,<26" }]
+provides-extras = ["parquet"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.11,<1" },
+]
+
+[[package]]
 name = "thesis-research"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx2" },
     { name = "openai" },
-    { name = "pyarrow" },
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "system-one-adapter", extra = ["openai"] },
+    { name = "thesis-datasets", extra = ["parquet"] },
     { name = "typesafe-sdk" },
 ]
 
@@ -1591,10 +1611,10 @@ dev = [
 requires-dist = [
     { name = "httpx2", specifier = ">=2.13,<3" },
     { name = "openai", specifier = ">=3.16,<4" },
-    { name = "pyarrow", specifier = ">=25,<26" },
     { name = "python-dotenv", specifier = ">=1.1,<2" },
     { name = "rich", specifier = ">=14,<15" },
     { name = "system-one-adapter", extras = ["openai"], specifier = ">=0.2,<0.3" },
+    { name = "thesis-datasets", extras = ["parquet"], editable = "../datasets" },
     { name = "typesafe-sdk", specifier = ">=0.7,<0.8" },
 ]
 

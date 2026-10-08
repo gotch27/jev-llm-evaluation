@@ -7,7 +7,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "httpx2>=2.13,<3",
     "openai>=3.16,<4",
-    "pyarrow>=25,<26",
+    "thesis-datasets[parquet]",
     "python-dotenv>=1.1,<2",
     "rich>=14,<15",
     "system-one-adapter[openai]>=0.2,<0.3",
@@ -16,6 +16,9 @@ dependencies = [
 
 [project.scripts]
 thesis-research = "thesis_research.cli:main"
+
+[tool.uv.sources]
+thesis-datasets = { path = "../datasets", editable = true }
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

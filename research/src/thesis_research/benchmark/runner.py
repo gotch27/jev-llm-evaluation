@@ -89,6 +89,7 @@ async def run_benchmark(
             config.dataset.id,
             config.dataset.revision,
             plan.cohort.split,
+            version=config.dataset.version,
         )
         task = build_structured_task(config, prepared.reference_schema)
         task.validate_state_fields(prepared.examples)
@@ -166,6 +167,7 @@ async def resume_benchmark(
         config.dataset.id,
         config.dataset.revision,
         plan.cohort.split,
+        version=config.dataset.version,
     )
     task = build_structured_task(config, prepared.reference_schema)
     task.validate_state_fields(prepared.examples)
