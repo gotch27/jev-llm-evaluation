@@ -1,0 +1,21 @@
+name = "BANKING77 without-criteria local Laya smoke"
+baseline_model_id = "laya-local"
+task_config = "../tasks/banking77-without-criteria.toml"
+
+[cohort]
+split = "train"
+strategy = "random"
+size = 1
+seed = 20260920
+
+[execution]
+example_concurrency = 1
+model_concurrency = 1
+
+[[models]]
+id = "laya-local"
+backend = "system_one"
+transport = "self_hosted"
+model = "laya-base"
+provider = "local"
+base_url = "http://127.0.0.1:8000"

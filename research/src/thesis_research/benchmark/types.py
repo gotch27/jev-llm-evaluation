@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 Backend = Literal["system_one", "llm"]
+Transport = Literal["vercel", "self_hosted"]
 DatasetSplit = str
 CohortStrategy = Literal["all", "random", "stratified_random"]
 LLMOutputMode = Literal["discrete", "probabilities"]
@@ -20,10 +21,14 @@ class ModelSpec:
     model: str
     provider: str
     reasoning_effort: ReasoningEffort | None = None
+    transport: Transport = "vercel"
+    base_url: str | None = None
+    api_key_env: str | None = None
+    timeout_seconds: float | None = None
 
-    def as_dict(self) -> dict[str, str | None]:
+    def as_dict(self) -> dict[str, str | float | None]:
         """Return the model settings in a JSON-safe form."""
-        values = {
+        values: dict[str, str | float | None] = {
             "id": self.id,
             "backend": self.backend,
             "model": self.model,
@@ -31,6 +36,12 @@ class ModelSpec:
         }
         if self.reasoning_effort is not None:
             values["reasoning_effort"] = self.reasoning_effort
+        if self.transport != "vercel":
+            values["transport"] = self.transport
+        for name in ("base_url", "api_key_env", "timeout_seconds"):
+            value = getattr(self, name)
+            if value is not None:
+                values[name] = value
         return values
 
 

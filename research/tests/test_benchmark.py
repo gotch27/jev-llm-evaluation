@@ -750,6 +750,7 @@ def test_resume_validates_every_model_before_mutation_or_requests(
 MODEL_SETTINGS = {
     "jev": ("system_one", "typesafe-ai/jev", "typesafe-ai"),
     "laya": ("system_one", "convaiinnovations/laya", "boundless"),
+    "laya-local": ("system_one", "laya-base", "local"),
     "liquid-d1": ("system_one", "liquid/d1", "liquid"),
     "llm-a": ("llm", "creator/llm-a", "creator"),
     "llm-b": ("llm", "creator/llm-b", "creator"),
@@ -770,6 +771,8 @@ def write_flexible_plan(tmp_path, model_ids, baseline, *, llm_output=None):
             f'[[models]]\nid = "{model_id}"\nbackend = "{backend}"\n'
             f'model = "{model}"\nprovider = "{provider}"\n'
         )
+        if model_id == "laya-local":
+            models[-1] += 'transport = "self_hosted"\nbase_url = "http://127.0.0.1:8000"\n'
     if not models:
         header = header.replace("[cohort]", "models = []\n\n[cohort]")
     path.write_text(header + "\n".join(models))
@@ -780,6 +783,8 @@ def write_flexible_plan(tmp_path, model_ids, baseline, *, llm_output=None):
     "model_ids,baseline,llm_output",
     [
         (("laya",), "laya", None),
+        (("laya-local",), "laya-local", None),
+        (("laya-local", "laya", "llm-a"), "laya-local", "probabilities"),
         (("llm-a",), "llm-a", "discrete"),
         (("jev", "laya", "liquid-d1"), "laya", None),
         (("laya", "liquid-d1"), "liquid-d1", "discrete"),
@@ -821,6 +826,12 @@ def test_flexible_benchmarks_share_all_options_and_use_explicit_baseline(
         mode = "native_probabilities" if MODEL_SETTINGS[model_id][0] == "system_one" else llm_output
         metadata = json.loads((run / "models" / model_id / "metadata.json").read_text())
         assert metadata["output_mode"] == mode
+        if model_id == "laya-local":
+            assert metadata["gateway"] is None
+            assert metadata["model"]["transport"] == "self_hosted"
+            assert metadata["model"]["base_url"] == "http://127.0.0.1:8000"
+            assert "Laya (local)" in (run / "report/index.html").read_text()
+
         decisions = read_jsonl(run / "models" / model_id / "decisions.jsonl")
         assert all(row["decision"]["answer_output_mode"] == mode for row in decisions)
 
@@ -861,7 +872,7 @@ def test_flexible_plan_requires_explicit_baseline_provider_and_current_backend(
         load_benchmark_plan(path)
 
 
-@pytest.mark.parametrize("model_id", ["laya", "liquid-d1", "llm-a"])
+@pytest.mark.parametrize("model_id", ["laya", "laya-local", "liquid-d1", "llm-a"])
 def test_single_model_run_resumes_without_repeating_completed_examples(
     benchmark_dataset, tmp_path, model_id
 ):

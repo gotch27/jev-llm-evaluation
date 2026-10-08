@@ -20,6 +20,7 @@ from thesis_research.run_storage import file_checksum, git_state, write_json
 MODEL_NAMES = {
     "jev": "Jev",
     "laya": "Laya",
+    "laya-local": "Laya (local)",
     "liquid-d1": "Liquid d1",
     "gpt-6-luna-decisions": "GPT-6 Luna Decisions",
     "gpt-5-6-luna": "GPT-5.6 Luna",
@@ -29,6 +30,7 @@ MODEL_NAMES = {
 MODEL_COLORS = {
     "jev": "#0072B2",
     "laya": "#56B4E9",
+    "laya-local": "#332288",
     "liquid-d1": "#E69F00",
     "gpt-6-luna-decisions": "#882255",
     "gpt-5-6-luna": "#D55E00",

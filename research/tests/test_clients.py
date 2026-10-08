@@ -18,7 +18,11 @@ from typesafe_sdk import (
     Usage,
 )
 
-from thesis_research.clients import VercelLLMDecisionClient, VercelSystemOneDecisionClient
+from thesis_research.clients import (
+    TypeSafeHTTPDecisionClient,
+    VercelLLMDecisionClient,
+    VercelSystemOneDecisionClient,
+)
 from thesis_research.clients import system_one as system_one_module
 from thesis_research.clients import vercel_provider as vercel_provider_module
 from thesis_research.clients.gateway_metadata import reported_cost, resolved_provider
@@ -537,6 +541,17 @@ def test_gateway_routing_requires_reported_metadata():
     )
 
 
+HTTP_SYSTEM_ONE_ROUTES = (*SYSTEM_ONE_ROUTES, ("laya-base", "local"))
+
+
+def http_system_one_client(model, provider, **kwargs):
+    if provider == "local":
+        return TypeSafeHTTPDecisionClient(
+            model, provider, base_url="http://127.0.0.1:8000", **kwargs
+        )
+    return VercelSystemOneDecisionClient(model, provider, **kwargs)
+
+
 def _http_system_one_payload(model="typesafe-ai/jev", provider="typesafe-ai"):
     return {
         "model": model,
@@ -552,7 +567,7 @@ def _http_system_one_payload(model="typesafe-ai/jev", provider="typesafe-ai"):
     }
 
 
-@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("model,provider", HTTP_SYSTEM_ONE_ROUTES)
 def test_system_one_http_retries_are_isolated_between_concurrent_examples(
     monkeypatch, model, provider
 ):
@@ -576,7 +591,7 @@ def test_system_one_http_retries_are_isolated_between_concurrent_examples(
             active -= 1
 
     async def run():
-        async with VercelSystemOneDecisionClient(
+        async with http_system_one_client(
             model,
             provider,
             max_concurrency=2,
@@ -598,7 +613,7 @@ def test_system_one_http_retries_are_isolated_between_concurrent_examples(
 
 
 @pytest.mark.parametrize("failure", ["http", "connection"])
-@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("model,provider", HTTP_SYSTEM_ONE_ROUTES)
 def test_system_one_exhausted_retries_are_recorded(monkeypatch, failure, model, provider):
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
     attempts = 0
@@ -615,7 +630,7 @@ def test_system_one_exhausted_retries_are_recorded(monkeypatch, failure, model, 
         )
 
     async def run():
-        async with VercelSystemOneDecisionClient(
+        async with http_system_one_client(
             model,
             provider,
             retry=RetryPolicy(max_retries=2, backoff_initial=0, backoff_max=0),
@@ -678,7 +693,7 @@ def test_provider_call_latency_excludes_queue_and_decision_latency_includes_it(
     assert result.calls[0].latency_seconds == 3
 
 
-@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("model,provider", HTTP_SYSTEM_ONE_ROUTES)
 @pytest.mark.parametrize("cost", [None, "0", "0.0025"])
 def test_system_one_http_routes_preserve_shared_questions_answers_and_metadata(
     monkeypatch, model, provider, cost
@@ -715,7 +730,7 @@ def test_system_one_http_routes_preserve_shared_questions_answers_and_metadata(
         return httpx2.Response(200, json=payload)
 
     async def run():
-        async with VercelSystemOneDecisionClient(
+        async with http_system_one_client(
             model, provider, _transport=httpx2.MockTransport(reply)
         ) as client:
             return await client.evaluate(state, questions)
@@ -724,9 +739,17 @@ def test_system_one_http_routes_preserve_shared_questions_answers_and_metadata(
     assert len(requests) == 1
     request = requests[0]
     body = json.loads(request.content)
-    assert str(request.url) == "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
+    assert str(request.url) == (
+        "http://127.0.0.1:8000/v1/systemone"
+        if provider == "local"
+        else "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
+    )
     assert body["model"] == model
-    assert body["providerOptions"] == {"gateway": {"only": [provider]}}
+    if provider == "local":
+        assert "providerOptions" not in body
+        assert "Authorization" not in request.headers
+    else:
+        assert body["providerOptions"] == {"gateway": {"only": [provider]}}
     assert body["state"] == state
     assert body["questions"] == {
         key: question.model_dump(mode="json", exclude_none=True)
@@ -751,7 +774,7 @@ def test_system_one_http_routes_preserve_shared_questions_answers_and_metadata(
     assert "unused-test-key" not in json.dumps(result.calls[0].raw)
 
 
-@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("model,provider", HTTP_SYSTEM_ONE_ROUTES)
 @pytest.mark.parametrize("refused_ids", [("intent",), tuple(QUESTIONS)])
 def test_system_one_refusals_keep_successful_answers_usage_and_raw_without_retries(
     monkeypatch, model, provider, refused_ids
@@ -782,7 +805,7 @@ def test_system_one_refusals_keep_successful_answers_usage_and_raw_without_retri
         return httpx2.Response(200, json=payload)
 
     async def run():
-        async with VercelSystemOneDecisionClient(
+        async with http_system_one_client(
             model, provider, _transport=httpx2.MockTransport(reply)
         ) as client:
             return await client.evaluate("A message", QUESTIONS)
@@ -805,7 +828,7 @@ def test_system_one_refusals_keep_successful_answers_usage_and_raw_without_retri
     assert result.resolved_providers == (provider,)
 
 
-@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("model,provider", HTTP_SYSTEM_ONE_ROUTES)
 def test_system_one_http_evaluation_cancellation_releases_concurrency(monkeypatch, model, provider):
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
 
@@ -822,7 +845,7 @@ def test_system_one_http_evaluation_cancellation_releases_concurrency(monkeypatc
                 await release.wait()
             return httpx2.Response(200, json=_http_system_one_payload(model, provider))
 
-        async with VercelSystemOneDecisionClient(
+        async with http_system_one_client(
             model, provider, max_concurrency=1, _transport=httpx2.MockTransport(reply)
         ) as client:
             task = asyncio.create_task(client.evaluate("cancel", QUESTIONS))
@@ -841,13 +864,19 @@ def test_system_one_http_evaluation_cancellation_releases_concurrency(monkeypatc
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("model,provider", HTTP_SYSTEM_ONE_ROUTES)
 def test_factory_selects_generic_system_one_client_without_llm_output(monkeypatch, model, provider):
     from thesis_research.clients import create_decision_client
 
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
-    client = create_decision_client("system_one", model, provider, max_concurrency=1)
-    assert isinstance(client, VercelSystemOneDecisionClient)
+    settings = (
+        {"transport": "self_hosted", "base_url": "http://127.0.0.1:8000"}
+        if provider == "local"
+        else {}
+    )
+    client = create_decision_client("system_one", model, provider, max_concurrency=1, **settings)
+    expected = TypeSafeHTTPDecisionClient if provider == "local" else VercelSystemOneDecisionClient
+    assert type(client) is expected
     assert client.requested_model == model
     assert client.requested_provider == provider
     asyncio.run(client.aclose())
@@ -877,7 +906,7 @@ def test_factory_rejects_missing_or_retired_settings(backend, provider, mode, re
         )
 
 
-@pytest.mark.parametrize("model,provider", SYSTEM_ONE_ROUTES)
+@pytest.mark.parametrize("model,provider", HTTP_SYSTEM_ONE_ROUTES)
 @pytest.mark.parametrize("cost", [None, 0.0])
 def test_system_one_nonretryable_failure_preserves_reported_routing_cost_and_usage(
     monkeypatch, model, provider, cost
@@ -897,7 +926,7 @@ def test_system_one_nonretryable_failure_preserves_reported_routing_cost_and_usa
         return httpx2.Response(422, json=payload)
 
     async def run():
-        async with VercelSystemOneDecisionClient(
+        async with http_system_one_client(
             model, provider, _transport=httpx2.MockTransport(reply)
         ) as client:
             return await client.evaluate("A message", QUESTIONS)

@@ -94,6 +94,10 @@ async def run_model(
             max_concurrency=example_concurrency,
             llm_output_mode=llm_output_mode,
             reasoning_effort=spec.reasoning_effort,
+            transport=spec.transport,
+            base_url=spec.base_url,
+            api_key_env=spec.api_key_env,
+            timeout_seconds=spec.timeout_seconds,
         )
 
         def record_progress(progress: dict[str, Any]) -> None:

@@ -36,7 +36,7 @@ def load_or_create_model_metadata(
         return metadata
     metadata = {
         "model": spec.as_dict(),
-        "gateway": "vercel",
+        "gateway": "vercel" if spec.transport == "vercel" else None,
         "output_mode": output_mode,
         "example_concurrency": example_concurrency,
         "status": "pending",

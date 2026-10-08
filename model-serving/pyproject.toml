@@ -1,0 +1,34 @@
+[project]
+name = "thesis-model-serving"
+version = "0.1.0"
+description = "Independent TypeSafe-compatible serving of Laya checkpoints"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = ["laya[serve]==0.3.29"]
+
+[project.scripts]
+serve-laya = "model_serving.server:main"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1", "httpx>=0.28,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/model_serving"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/README.md", "/AGENTS.md", "/pyproject.toml", "/uv.lock"]
+exclude = ["/data", "/outputs", "/models", "/.venv", "/dist", ".env"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

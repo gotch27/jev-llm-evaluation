@@ -2,7 +2,8 @@
 
 Python components for the thesis experiments. The project prepares pinned labeled datasets,
 builds one shared TypeSafe `Choice`, `Noul`, or `Score` question per task, calls System One models
-and LLMs through Vercel AI Gateway, and runs coordinated benchmarks in which every model receives the same
+and LLMs through Vercel AI Gateway or System One models through a configured HTTP endpoint,
+and runs coordinated benchmarks in which every model receives the same
 frozen cohort. Every completed run prints a statistics table and generates a standalone HTML
 dashboard alongside the machine-readable tables used for later statistical analysis. BANKING77 is the Choice task and BoolQ is the first Noul task.
 
@@ -38,7 +39,7 @@ An LLM receives one isolated request per question; those requests run concurrent
 default. BANKING77 has one Choice question with 77 options, so this distinction does
 not create extra requests.
 
-Both paths use `AI_GATEWAY_API_KEY`. System One uses Vercel's TypeSafe-compatible endpoint
+The hosted paths use `AI_GATEWAY_API_KEY`. System One uses Vercel's TypeSafe-compatible endpoint
 while keeping the TypeSafe Python SDK and its native state-and-questions interface:
 
 ```python
@@ -83,6 +84,49 @@ Noul, and Score answers and the full raw response are preserved.
 TypeSafe SDK, endpoint, and `AI_GATEWAY_API_KEY`; no direct OpenAI client or additional credential
 is needed. Per-question refusals are recorded as `ModelRefusal` errors, retaining other successful
 answers, billed usage, cost, and raw diagnostics. Refusals do not trigger retries.
+
+### Local and other self-hosted System One services
+
+`TypeSafeHTTPDecisionClient` implements the same `DecisionClient` interface for any API root
+implementing TypeSafe's `POST /v1/systemone` request and response contract. It requires typed
+answers, a model identity, and token usage. It does not require health checks, checkpoint manifests,
+or Laya metadata. Authentication is opt-in; no Vercel credentials or gateway routing options are
+sent. Missing reported cost remains unknown. Native probabilities, raw responses, errors,
+retries, and latency use the same decoding and measurement as the Vercel client.
+
+Model loading lives in the independent [model-serving project](../model-serving/README.md), with
+its own environment. Start it in one terminal:
+
+```sh
+cd /Users/gorazdfilipovski/Documents/graduate-thesis/model-serving
+uv sync --locked
+uv run serve-laya --checkpoint convaiinnovations/laya \
+  --revision 7b928d828b7b0e022f929d9bd2e44165aa270148 \
+  --model-id laya-base --device mps --max-len 8192 --head-max-len 8192
+```
+
+In another terminal, run one of the local-only training smoke plans:
+
+```sh
+cd /Users/gorazdfilipovski/Documents/graduate-thesis/research
+uv run thesis-research benchmark --plan experiments/intent_classification/benchmarks/banking77-local-smoke.toml --open-report
+uv run thesis-research benchmark --plan experiments/intent_classification/benchmarks/banking77-without-criteria-local-smoke.toml --open-report
+uv run thesis-research benchmark --plan experiments/boolean_question_answering/benchmarks/boolq-local-smoke.toml --open-report
+```
+
+These preserve the hosted training cohorts and seeds, with concurrency one. Local-only runs
+need no API key. The full BANKING77 question retains all 77 options. The server reports input
+truncation or option collapse as errors rather than accepting incomplete inputs.
+
+Use a distinct model alias for each changed checkpoint, such as `laya-banking77-ft-v1`. Loading
+base weights from a local directory does not make them fine-tuned. To resume an interrupted run,
+restart the original checkpoint with its original alias and token settings at the frozen URL;
+then use `thesis-research benchmark --resume RUN_DIRECTORY`. The benchmark freezes connection
+settings but cannot verify an arbitrary service's weights. This service includes a file fingerprint
+in raw metadata for auditing. Research contains no serving CLI, PyTorch dependency, or Laya dependency.
+
+See [self-hosted model configuration](CONFIGURATION.md#self-hosted-system-one) for authentication,
+timeouts, and a mixed hosted/local example.
 
 For an LLM, supply a canonical Vercel model ID and pin one upstream provider. Virtual models and
 routing aliases are rejected. Prefer a versioned model ID when Vercel offers one. The selected
@@ -145,10 +189,11 @@ connection failures. Failed responses also retain reported routing, usage, and c
 A retry count of zero means the initial attempt was sufficient; `None` means
 the count could not be observed, such as a failure from an externally injected client.
 
-Both clients use the same explicit transient retry policy: two retries with bounded backoff,
-retry-after support, and a 30-second retry budget. HTTP calls have a 60-second timeout. Malformed
-LLM output is not retried. Model calling is asynchronous; always use the clients as async context
-managers or call `aclose()`.
+All clients allow at most two transient retries by default, with bounded backoff and retry-after
+support. Hosted clients use a 30-second retry budget and a 60-second HTTP timeout. Self-hosted
+clients default to 120 seconds for both; `timeout_seconds` changes those limits together.
+Malformed LLM output is not retried. Model calling is asynchronous; always use the clients as
+async context managers or call `aclose()`.
 
 `DecisionClient` and `DatasetAdapter` are Python Protocols. The concrete clients and dataset
 adapters explicitly inherit their contracts to make those relationships visible. Each client's
@@ -599,8 +644,8 @@ These durations also include network and SDK work. In each latency summary, `p50
 interpolated between measurements and can be durations no individual call took. Small cohorts
 provide only a coarse view of the slower tail.
 
-The report is generated automatically after every model has completed. It contains no graphs. Its
-JSON and JSONL files preserve the values needed to create graphs later:
+The report is generated automatically after every model has completed. Its HTML dashboard
+contains graphs, while the JSON and JSONL files preserve the values needed for later analysis:
 
 - `model_metrics.jsonl`: question type, accuracy, macro-F1, correct and status counts, Noul or
   Score metrics where applicable, measured and total elapsed time, latency statistics, token
@@ -711,8 +756,8 @@ uv run ruff format --check .
 - `src/thesis_research/datasets/`: shared typed examples, dataset registry, and pinned adapters.
 - `src/thesis_research/config.py`: typed, validated task configuration.
 - `src/thesis_research/tasks/`: validated state and question construction.
-- `src/thesis_research/clients/`: shared result contracts plus System One and LLM clients
-  through Vercel AI Gateway.
+- `src/thesis_research/clients/`: shared result contracts, hosted System One and LLM clients
+  through Vercel AI Gateway, and self-hosted TypeSafe HTTP clients.
 - `src/thesis_research/prediction.py`: bounded prediction and result serialization.
 - `src/thesis_research/benchmark/`: plans, shared cohorts, resumable model runs, and reports.
 - `src/thesis_research/benchmark/model_records.py`: model-record validation and metric summaries.

@@ -26,3 +26,7 @@ research/data/*
 !research/data/.gitkeep
 research/outputs/*
 !research/outputs/.gitkeep
+
+# Independently served model checkpoints and local validation records
+model-serving/models/
+model-serving/outputs/

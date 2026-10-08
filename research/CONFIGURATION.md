@@ -7,8 +7,9 @@ The project separates the supervised task from the benchmark execution:
 - A **benchmark TOML** selects a dataset split and cohort, the LLM answer mode, concurrency, and
   the System One models and LLMs that receive that same cohort.
 
-Both files and the selected cohort are copied into every benchmark run. API keys belong only in
-`research/.env`; the CLI reads `AI_GATEWAY_API_KEY` from there.
+Both files and the selected cohort are copied into every benchmark run. API keys belong in
+environment variables or ignored `research/.env`, never in TOML. Hosted calls use
+`AI_GATEWAY_API_KEY`; self-hosted authentication is optional and selects a separate variable.
 
 ## Task TOML
 
@@ -235,6 +236,55 @@ provider = "openai"
 System One responses can refuse individual questions. These become `ModelRefusal` errors with
 the raw refusal in their diagnostics; successful answers and billed usage remain recorded.
 An HTTP-successful refusal is not retried.
+
+## Self-hosted System One
+
+Omitting `transport` uses the existing Vercel transport. A self-hosted System One model instead
+specifies an API root; the SDK appends `/v1/systemone`:
+
+```toml
+[[models]]
+id = "laya-local"
+backend = "system_one"
+transport = "self_hosted"
+model = "laya-base"
+provider = "local"
+base_url = "http://127.0.0.1:8000"
+# api_key_env = "LOCAL_DECISION_API_KEY" # optional Bearer authentication
+# timeout_seconds = 120.0              # optional; positive, finite seconds
+```
+
+`provider` is a provenance label for self-hosted models. No `gateway.only` routing options are
+sent. The endpoint must return TypeSafe-compatible Choice/Noul/Score answers, model identity,
+and usage. Health endpoints and checkpoint metadata are optional. Missing reported cost remains
+unknown, and reported zero remains zero. Raw response extensions are retained for auditing.
+
+Without `api_key_env`, requests contain no Authorization header, even when hosted credentials
+exist in the environment. When set, the named variable must contain the server's key;
+`AI_GATEWAY_API_KEY` cannot be selected. URLs cannot contain credentials, query parameters, or
+fragments. `base_url`, `api_key_env`, and `timeout_seconds` require `self_hosted`; this transport
+requires the `system_one` backend. Reasoning effort remains exclusive to hosted LLMs.
+
+For a mixed run, add a hosted model to the same plan and select either configured ID as baseline:
+
+```toml
+[[models]]
+id = "jev"
+backend = "system_one"
+model = "typesafe-ai/jev"
+provider = "typesafe-ai"
+```
+
+With the local stanza above and `baseline_model_id = "laya-local"`, this compares Jev against
+local Laya on identical frozen states and questions. The Jev calls use the Vercel key and incur
+provider charges. Add `[llm_output]` only when including LLMs.
+
+The independent [model-serving project](../model-serving/README.md) supplies a Laya server and
+separate commands. Exported checkpoints can be served directly. Change the model alias when
+weights change. Resume requires restarting the original checkpoint, alias, token budgets, and
+URL; the benchmark freezes settings but does not enforce a checkpoint-manifest protocol.
+Existing Vercel model serialization is unchanged so historical completed runs and resume settings
+remain compatible.
 
 ## Prediction records and metrics
 

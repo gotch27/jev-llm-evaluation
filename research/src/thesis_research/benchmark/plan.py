@@ -16,7 +16,9 @@ from thesis_research.benchmark.types import (
     LLMOutputSpec,
     ModelSpec,
     ReasoningEffort,
+    Transport,
 )
+from thesis_research.clients.system_one import validate_http_settings
 
 _MODEL_ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
@@ -135,7 +137,17 @@ def _parse_model(value: object, index: int) -> ModelSpec:
     _require_fields(
         value,
         {"id", "backend", "model", "provider"},
-        {"id", "backend", "model", "provider", "reasoning_effort"},
+        {
+            "id",
+            "backend",
+            "model",
+            "provider",
+            "reasoning_effort",
+            "transport",
+            "base_url",
+            "api_key_env",
+            "timeout_seconds",
+        },
         f"Model {index}",
     )
     model_id = _nonempty_string(value["id"], f"Model {index} id")
@@ -154,12 +166,30 @@ def _parse_model(value: object, index: int) -> ModelSpec:
         )
     if backend == "system_one" and reasoning_value is not None:
         raise ValueError(f"Model {index} cannot set reasoning_effort for System One")
+    transport = value.get("transport", "vercel")
+    if transport not in ("vercel", "self_hosted"):
+        raise ValueError(f"Model {index} transport must be vercel or self_hosted")
+    base_url = value.get("base_url")
+    api_key_env = value.get("api_key_env")
+    timeout_seconds = value.get("timeout_seconds")
+    if transport == "self_hosted":
+        if backend != "system_one":
+            raise ValueError("self_hosted transport requires the system_one backend")
+        validate_http_settings(
+            base_url, api_key_env, 120.0 if timeout_seconds is None else timeout_seconds
+        )
+    elif any(name in value for name in ("base_url", "api_key_env", "timeout_seconds")):
+        raise ValueError("base_url, api_key_env, and timeout_seconds require self_hosted transport")
     return ModelSpec(
         id=model_id,
         backend=cast(Backend, backend),
         model=_nonempty_string(value["model"], f"Model {index} model"),
         provider=provider,
         reasoning_effort=cast(ReasoningEffort | None, reasoning_value),
+        transport=cast(Transport, transport),
+        base_url=base_url,
+        api_key_env=api_key_env,
+        timeout_seconds=timeout_seconds,
     )
 
 

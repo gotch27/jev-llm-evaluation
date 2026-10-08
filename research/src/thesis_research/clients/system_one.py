@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
+import re
 import time
 from contextvars import ContextVar
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any, Self
+from urllib.parse import urlsplit
 
 import httpx2
 from typesafe_sdk import AsyncTypeSafeClient, JSONContent, Questions, RetryPolicy, TypeSafeError
@@ -34,23 +37,12 @@ class _RequestAttempts:
     count: int = 0
 
 
-class VercelSystemOneDecisionClient(DecisionClient):
-    """Evaluate structured questions through Vercel's System One endpoint.
+class TypeSafeHTTPDecisionClient(DecisionClient):
+    """Evaluate native decisions at any TypeSafe-compatible HTTP API root.
 
-    All questions for one state are sent in a single System One request. A semaphore
-    bounds concurrent requests when the same client is shared across dataset examples.
-
-    Args:
-        model: Canonical Vercel System One model identifier.
-        provider: Upstream provider slug that must serve every request.
-        max_concurrency: Maximum active System One requests for this client.
-        timeout_seconds: HTTP timeout applied to each request.
-        retry: Optional TypeSafe transient retry policy.
-        _client: Optional SDK client injected by offline tests.
-        _transport: Optional HTTP transport injected by offline tests.
-
-    Raises:
-        ValueError: If settings are invalid or ``AI_GATEWAY_API_KEY`` is absent.
+    No health endpoint or server-specific metadata is required. Authentication
+    is opt-in through an explicitly named environment variable; cloud credentials
+    are never selected implicitly. All questions share one bounded HTTP request.
     """
 
     def __init__(
@@ -58,47 +50,81 @@ class VercelSystemOneDecisionClient(DecisionClient):
         model: str,
         provider: str,
         *,
+        base_url: str,
+        api_key_env: str | None = None,
         max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
-        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        timeout_seconds: float = 120.0,
         retry: RetryPolicy | None = None,
         _client: AsyncTypeSafeClient | Any | None = None,
         _transport: httpx2.AsyncBaseTransport | None = None,
+    ) -> None:
+        validate_http_settings(base_url, api_key_env, timeout_seconds)
+        api_key = None
+        if api_key_env is not None:
+            api_key = os.environ.get(api_key_env)
+            if not api_key:
+                raise ValueError(f"{api_key_env} is required")
+        self._configure(
+            model,
+            provider,
+            base_url=base_url,
+            api_key=api_key,
+            max_concurrency=max_concurrency,
+            timeout_seconds=timeout_seconds,
+            retry=retry or RetryPolicy(timeout=timeout_seconds),
+            extra_body=None,
+            _client=_client,
+            _transport=_transport,
+        )
+
+    def _configure(
+        self,
+        model: str,
+        provider: str,
+        *,
+        base_url: str,
+        api_key: str | None,
+        max_concurrency: int,
+        timeout_seconds: float,
+        retry: RetryPolicy,
+        extra_body: dict[str, Any] | None,
+        _client: AsyncTypeSafeClient | Any | None,
+        _transport: httpx2.AsyncBaseTransport | None,
     ) -> None:
         if not model.strip():
             raise ValueError("model must be nonempty")
         if not provider.strip():
             raise ValueError("provider must be nonempty")
-        if max_concurrency < 1:
+        if type(max_concurrency) is not int or max_concurrency < 1:
             raise ValueError("max_concurrency must be at least 1")
-        if timeout_seconds <= 0:
-            raise ValueError("timeout_seconds must be positive")
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive and finite")
         if _client is not None and _transport is not None:
             raise ValueError("Supply only one of _client or _transport")
-        retry = retry or RetryPolicy()
+        self._authenticated = api_key is not None
+        self._extra_body = extra_body
         self._attempts: ContextVar[_RequestAttempts | None] = ContextVar(
             "system_one_request_attempts", default=None
         )
         self._tracks_attempts = _client is None
         if _client is None:
-            api_key = os.environ.get("AI_GATEWAY_API_KEY")
-            if not api_key:
-                raise ValueError("AI_GATEWAY_API_KEY is required")
             _client = AsyncTypeSafeClient(
-                api_key=api_key,
+                # The SDK requires a key. The request hook removes its placeholder
+                # Authorization header entirely for unauthenticated endpoints.
+                api_key=api_key if api_key is not None else "unauthenticated",
                 model=model,
                 retry=retry,
                 timeout=timeout_seconds,
-                base_url=VERCEL_TYPESAFE_BASE_URL,
+                base_url=base_url,
                 http_client=httpx2.AsyncClient(
                     timeout=timeout_seconds,
                     transport=_transport,
                     event_hooks={"request": [self._record_attempt]},
+                    follow_redirects=False,
                 ),
             )
         self.requested_model = model
-        # Pin and record the requested route; resolved routing comes from the response.
         self.requested_provider = provider
-        # This policy controls retries. Actual retry counts are measured per evaluation.
         self._retry = retry
         self._timeout_seconds = timeout_seconds
         self._client = _client
@@ -138,11 +164,7 @@ class VercelSystemOneDecisionClient(DecisionClient):
                     model=self.requested_model,
                     retry=self._retry,
                     timeout=self._timeout_seconds,
-                    extra_body={
-                        "providerOptions": {
-                            "gateway": {"only": [self.requested_provider]},
-                        }
-                    },
+                    extra_body=self._extra_body,
                 )
             except TypeSafeError as error:
                 latency = time.perf_counter() - call_started
@@ -207,6 +229,8 @@ class VercelSystemOneDecisionClient(DecisionClient):
 
     async def _record_attempt(self, request: httpx2.Request) -> None:
         """Count each HTTP attempt in its evaluation's isolated async context."""
+        if not self._authenticated:
+            request.headers.pop("authorization", None)
         attempts = self._attempts.get()
         if attempts is not None:
             attempts.count += 1
@@ -229,6 +253,71 @@ class VercelSystemOneDecisionClient(DecisionClient):
         traceback: TracebackType | None,
     ) -> None:
         await self.aclose()
+
+
+class VercelSystemOneDecisionClient(TypeSafeHTTPDecisionClient):
+    """Use the shared TypeSafe transport with Vercel credentials and pinned routing."""
+
+    def __init__(
+        self,
+        model: str,
+        provider: str,
+        *,
+        max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        retry: RetryPolicy | None = None,
+        _client: AsyncTypeSafeClient | Any | None = None,
+        _transport: httpx2.AsyncBaseTransport | None = None,
+    ) -> None:
+        api_key = os.environ.get("AI_GATEWAY_API_KEY")
+        if _client is None and not api_key:
+            raise ValueError("AI_GATEWAY_API_KEY is required")
+        self._configure(
+            model,
+            provider,
+            base_url=VERCEL_TYPESAFE_BASE_URL,
+            api_key=api_key,
+            max_concurrency=max_concurrency,
+            timeout_seconds=timeout_seconds,
+            retry=retry or RetryPolicy(),
+            extra_body={"providerOptions": {"gateway": {"only": [provider]}}},
+            _client=_client,
+            _transport=_transport,
+        )
+
+
+def validate_http_settings(base_url: str, api_key_env: str | None, timeout_seconds: float) -> None:
+    """Validate endpoint settings without reading credentials or opening connections."""
+    if not isinstance(base_url, str) or not base_url.strip():
+        raise ValueError("base_url must be a nonempty HTTP API root")
+    parsed = urlsplit(base_url)
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "base_url must be an HTTP(S) API root without credentials, query, or fragment"
+        )
+    # Accessing the parsed port also validates its range and syntax.
+    parsed.port
+    if api_key_env is not None and (
+        not isinstance(api_key_env, str)
+        or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", api_key_env) is None
+        or api_key_env == "AI_GATEWAY_API_KEY"
+    ):
+        raise ValueError(
+            "api_key_env must name a separate environment variable, not AI_GATEWAY_API_KEY"
+        )
+    if (
+        isinstance(timeout_seconds, bool)
+        or not isinstance(timeout_seconds, int | float)
+        or (not math.isfinite(timeout_seconds) or timeout_seconds <= 0)
+    ):
+        raise ValueError("timeout_seconds must be positive and finite")
 
 
 def _refusal_errors(raw: dict[str, Any], questions: Questions) -> dict[str, DecisionError]:
@@ -279,7 +368,7 @@ def _reported_tokens(raw: dict[str, Any], name: str) -> int | None:
 
 
 def _result(
-    client: VercelSystemOneDecisionClient,
+    client: TypeSafeHTTPDecisionClient,
     answers: dict,
     errors: dict,
     calls: list[CallRecord],
