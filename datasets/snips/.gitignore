@@ -1,0 +1,12 @@
+.env
+.venv/
+.pipeline.lock
+__pycache__/
+raw/
+source/
+model-catalog.json
+cache/
+logs/
+translated/
+comparison/
+*.tmp
