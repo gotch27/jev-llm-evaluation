@@ -1,12 +1,7 @@
 .env
 .venv/
-.pipeline.lock
+.pipeline/
 __pycache__/
 raw/
 source/
-model-catalog.json
-cache/
-logs/
 translated/
-comparison/
-*.tmp

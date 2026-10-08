@@ -167,7 +167,7 @@ def build_sample(root, sources, total, seed, min_chars, max_chars):
     if min_chars > max_chars:
         raise engine.FatalError("--min-chars must not exceed --max-chars")
     connection = duckdb.connect()
-    scratch = root / "cache" / "duckdb-tmp"
+    scratch = root / ".pipeline/cache/duckdb-tmp"
     scratch.mkdir(parents=True, exist_ok=True)
     connection.execute("SET memory_limit='1GB'")
     connection.execute("SET threads=2")
@@ -402,7 +402,7 @@ def get_key(root):
 
 
 def get_model(root, name, offline=False):
-    saved = root / "model-catalog.json"
+    saved = root / ".pipeline/model-catalog.json"
     if offline and saved.exists():
         models = {item["id"]: item for item in json.loads(saved.read_text())["data"]}
     else:
@@ -448,8 +448,9 @@ def main(argv=None):
     args = parser().parse_args(argv)
     root = args.root.resolve()
     root.mkdir(parents=True, exist_ok=True)
-    (root / "logs").mkdir(exist_ok=True)
-    handlers = [logging.StreamHandler(), logging.FileHandler(root / "logs" / "pipeline.log", encoding="utf-8")]
+    log_dir = root / ".pipeline/logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    handlers = [logging.StreamHandler(), logging.FileHandler(log_dir / "pipeline.log", encoding="utf-8")]
     LOG.setLevel(logging.INFO)
     LOG.propagate = False
     for handler in handlers:
@@ -483,7 +484,7 @@ def main(argv=None):
                 return 0
             selected = select_pilot(rows, args.limit) if args.command == "translate" else rows
             model = get_model(root, args.model, offline=not paid_command)
-            store = engine.Store(root / "cache" / "translations.sqlite3")
+            store = engine.Store(root / ".pipeline/cache/translations.sqlite3")
             retry_job = None
             if args.command == "retranslate":
                 engine.PROMPT = ORIGINAL_PROMPT + RETRY_INSTRUCTIONS
@@ -498,7 +499,7 @@ def main(argv=None):
                                       "pending_reviews": count_pending, "excluded_flags": args.exclude_flag,
                                       "original_export_preserved": retry_job["baseline_directory"]}, indent=2))
                     return 0
-                engine.write_json(root / "cache/retranslation-jobs" / (retry_job["job_id"] + ".json"), retry_job)
+                engine.write_json(root / ".pipeline/cache/retranslation-jobs" / (retry_job["job_id"] + ".json"), retry_job)
             if args.command in ("status", "export"):
                 latest = root / "translated/latest.json"
                 if latest.exists():

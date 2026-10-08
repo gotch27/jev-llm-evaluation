@@ -245,7 +245,7 @@ def load_source(root):
 
 def catalog(root):
     data = json.loads(fetch_public(GATEWAY + "/models"))
-    write_json(root / "model-catalog.json", {"checked_at": now(), **data})
+    write_json(root / ".pipeline/model-catalog.json", {"checked_at": now(), **data})
     return {item["id"]: item for item in data["data"]}
 
 
@@ -554,7 +554,9 @@ def configure(root):
 
 @contextlib.contextmanager
 def exclusive_lock(root):
-    with (root / ".pipeline.lock").open("w") as stream:
+    state = root / ".pipeline"
+    state.mkdir(parents=True, exist_ok=True)
+    with (state / "lock").open("w") as stream:
         try:
             fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -624,8 +626,9 @@ def main(argv=None):
     args = parser().parse_args(argv)
     root = args.root.resolve()
     root.mkdir(parents=True, exist_ok=True)
-    (root / "logs").mkdir(exist_ok=True)
-    handlers = [logging.StreamHandler(), logging.FileHandler(root / "logs" / "pipeline.log", encoding="utf-8")]
+    log_dir = root / ".pipeline/logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    handlers = [logging.StreamHandler(), logging.FileHandler(log_dir / "pipeline.log", encoding="utf-8")]
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     LOG.setLevel(logging.INFO)
     LOG.propagate = False
@@ -665,12 +668,12 @@ def main(argv=None):
                 if args.backoff < 0 or args.backoff_max < 0:
                     raise FatalError("Backoff settings must be nonnegative")
             # Status/export work offline with the saved catalog, for the same cache profile.
-            saved = root / "model-catalog.json"
+            saved = root / ".pipeline/model-catalog.json"
             models = ({m["id"]: m for m in json.loads(saved.read_text())["data"]}
                       if args.command in ("status", "export") and saved.exists() else catalog(root))
             names = list(dict.fromkeys(args.models)) if args.command == "compare" else [args.model]
             chosen = [get_model(models, name) for name in names]
-            store = Store(root / "cache" / "translations.sqlite3")
+            store = Store(root / ".pipeline/cache/translations.sqlite3")
             signal.signal(signal.SIGINT, handle_interrupt)
             signal.signal(signal.SIGTERM, handle_interrupt)
             if args.command == "status":
