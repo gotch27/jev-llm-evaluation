@@ -9,8 +9,15 @@ from thesis_datasets.releases import load_release
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description="Prepare, publish, and verify shared datasets")
     commands = parser.add_subparsers(dest="command", required=True)
+    prepare = commands.add_parser("prepare", help="Prepare training splits from downloaded sources")
+    prepare.add_argument("--dataset", choices=["macedonian-tweet-sentiment"], required=True)
+    prepare.add_argument("--root", type=Path, default=Path("datasets"))
+    prepare.add_argument(
+        "--revision", help="Pinned source commit; defaults to the verified snapshot"
+    )
+    prepare.add_argument("--seed", type=int, default=42)
     publish = commands.add_parser("publish", help="Freeze existing prepared files; no downloads")
     publish.add_argument(
         "--dataset", choices=["banking77", "boolq", "yelp", "snips"], required=True
@@ -26,6 +33,32 @@ def main() -> None:
     verify.add_argument("--version", required=True)
     args = parser.parse_args()
     try:
+        if args.command == "prepare":
+            from thesis_datasets.sources.macedonian_sentiment import (
+                REVISION,
+                prepare_macedonian_sentiment,
+            )
+
+            directory = prepare_macedonian_sentiment(
+                args.root, args.revision or REVISION, seed=args.seed
+            )
+            manifest, splits = load_release(args.root, args.dataset, directory.name)
+            print(
+                json.dumps(
+                    {
+                        "directory": str(directory.resolve()),
+                        "dataset": args.dataset,
+                        "version": manifest["version"],
+                        "splits": {split: len(rows) for split, rows in splits.items()},
+                        "label_counts": manifest["provenance"]["audit"]["label_counts"],
+                        "excluded_training_rows": len(
+                            manifest["provenance"]["audit"]["excluded_training_rows"]
+                        ),
+                    },
+                    indent=2,
+                )
+            )
+            return
         if args.command == "verify":
             manifest, splits = load_release(args.root, args.dataset, args.version)
             print(
