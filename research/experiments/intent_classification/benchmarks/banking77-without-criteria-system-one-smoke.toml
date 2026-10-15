@@ -35,3 +35,33 @@ id = "gpt-6-luna-decisions"
 backend = "system_one"
 model = "openai/gpt-6-luna-decisions"
 provider = "openai"
+
+[[models]]
+id = "microsoft-decision-1"
+backend = "system_one"
+model = "microsoft/microsoft-decision-1"
+provider = "azure"
+
+[[models]]
+id = "scaledown-classify-1"
+backend = "system_one"
+model = "scaledown/scaledown-classify-1"
+provider = "scaledown"
+
+[[models]]
+id = "pplx-decider-v1-1-27b"
+backend = "system_one"
+model = "perplexity/pplx-decider-v1.1-27b"
+provider = "perplexity"
+
+[[models]]
+id = "liquid-d1-ultra"
+backend = "system_one"
+model = "liquid/d1-ultra"
+provider = "liquid"
+
+[[models]]
+id = "jev-1-14-0"
+backend = "system_one"
+model = "typesafe-ai/jev-1.14.0"
+provider = "typesafe-ai"

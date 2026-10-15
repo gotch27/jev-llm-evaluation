@@ -74,11 +74,26 @@ The same client supports these routes, with the configured provider pinned using
 | Laya | `convaiinnovations/laya` | `boundless` |
 | Liquid d1 | `liquid/d1` | `liquid` |
 | GPT-6 Luna Decisions | `openai/gpt-6-luna-decisions` | `openai` |
+| Microsoft Decision-1 | `microsoft/microsoft-decision-1` | `azure` |
+| ScaleDown Classify-1 | `scaledown/scaledown-classify-1` | `scaledown` |
+| Perplexity Decider v1.1 27B | `perplexity/pplx-decider-v1.1-27b` | `perplexity` |
+| Liquid d1 Ultra | `liquid/d1-ultra` | `liquid` |
+| Jev 1.14.0 | `typesafe-ai/jev-1.14.0` | `typesafe-ai` |
 
 These routes use [Vercel's compatible TypeSafe endpoint](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe)
-and [System One model routing](https://vercel.com/i/jev-vs-laya-vs-liquid-d1). Use Laya's standard
-ID; pricing is taken from actual responses rather than promotional assumptions. Native Choice,
-Noul, and Score answers and the full raw response are preserved.
+and were checked against its [decision-model list](https://ai-gateway.vercel.sh/typesafe/v1/models)
+and [per-model provider endpoints](https://vercel.com/docs/ai-gateway/models-and-providers)
+on 2026-10-15. Microsoft's upstream provider slug is `azure`, while its model ID starts with
+`microsoft/`. Use Laya's standard ID; pricing is taken from actual responses rather than
+promotional assumptions. Native Choice, Noul, and Score answers and the full raw response are
+preserved. All routes use the existing client, TypeSafe SDK, and `AI_GATEWAY_API_KEY`.
+
+The five additions are Microsoft Decision-1 (Gateway release 2026-10-09), ScaleDown Classify-1
+(2026-10-13), Perplexity Decider v1.1 27B (2026-10-14), Liquid d1 Ultra and Jev 1.14.0
+(both 2026-10-15). These additions use the current text-only task inputs and existing Choice,
+Noul, and Score questions. The unversioned `typesafe-ai/jev` route remains the existing baseline;
+`jev-1-14-0` is a separate local ID for the explicitly pinned release. The alias may resolve to
+the same version, so this alone does not establish an old-versus-new Jev comparison.
 
 [GPT-6 Luna Decisions](https://vercel.com/ai-gateway/models/gpt-6-luna-decisions) uses the same
 TypeSafe SDK, endpoint, and `AI_GATEWAY_API_KEY`; no direct OpenAI client or additional credential
@@ -438,8 +453,8 @@ reasoning_effort = "low"
 same training split, random seed, cohort size, models, and LLM output mode, so both smoke plans
 select the same example and differ only in the task definition.
 
-Three System One-only connectivity plans compare Jev, Laya, Liquid d1, and GPT-6 Luna Decisions,
-with Jev as baseline:
+Three System One-only connectivity plans compare all nine routes in the table above, with the
+unversioned Jev route as baseline:
 
 - `experiments/intent_classification/benchmarks/banking77-system-one-smoke.toml`: one training
   example with all 77 intent criteria.
@@ -453,7 +468,7 @@ all 77 BANKING77 options. Laya's large-option behavior is an experimental limita
 the framework does not shortlist options or introduce a hierarchy. To run a single model, retain
 its `[[models]]` table and set `baseline_model_id` to its ID.
 
-Run these four-model training checks from `research/` (each command makes billable model calls
+Run these nine-model training checks from `research/` (each command makes billable model calls
 and opens the generated report):
 
 ```bash
@@ -476,6 +491,12 @@ succeeded without retries (five HTTP attempts; limit 15), with total reported co
 The responses, frozen inputs, usage, routing, errors, and source provenance are saved separately
 under `outputs/validation/openai-decisions/`. These checks confirm account access and request
 compatibility, not comparative quality. Refusal handling was verified with offline HTTP fixtures.
+
+The five routes added on 2026-10-15 have offline HTTP-fixture coverage for provider pinning,
+unchanged shared state and all 77 Choice options, Choice/Noul/Score decoding, raw usage and cost,
+refusals, and transient failures. Their catalog and provider entries were checked with public
+read-only requests. No live inference was run for these additions; account access, provider
+input limits, and full BANKING77 compatibility still need the training smoke checks above.
 
 `banking77-timing-pilot.toml` is a separate training-only timing-method check using 10 random
 examples. It runs models and examples sequentially and measures every selected example, including
@@ -714,9 +735,11 @@ They report count, mean, population standard deviation, minimum, p50, p90, p95, 
 linear-interpolated percentiles. Failed calls remain visible in the all-decision and provider-call
 summaries rather than silently disappearing.
 
-Vercel currently exposes Jev as the unversioned `typesafe-ai/jev` identifier. Run records preserve
-the requested identifier, response-reported model and provider, timestamp, raw response, and code
-revision. Confirm resolved routing with a small development benchmark before a thesis-quality run.
+Vercel exposes both the unversioned `typesafe-ai/jev` identifier and pinned releases, including
+`typesafe-ai/jev-1.13.0` and `typesafe-ai/jev-1.14.0`. Use an explicit version for a frozen thesis
+comparison. Run records preserve the requested identifier, response-reported model and provider,
+timestamp, raw response, and code revision. Confirm resolved routing with a small development
+benchmark before a thesis-quality run.
 Preparing data, mocked provider tests, and checking the software do not constitute measured model
 results.
 

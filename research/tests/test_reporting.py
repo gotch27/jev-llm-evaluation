@@ -74,7 +74,7 @@ def saved_report(tmp_path):
                         "laya": 0.0,
                         "liquid-d1": 0.0015,
                         "gpt-6-luna-decisions": 0.0002,
-                    }[model],
+                    }.get(model, 0.0002),
                     "all_decision_latency_p50_seconds": 0.25,
                     "all_decision_latency_p95_seconds": 0.565,
                     "brier_score": 0.12,
@@ -132,11 +132,36 @@ def saved_report(tmp_path):
 
 @pytest.mark.parametrize("question_type", ["choice", "noul", "score"])
 @pytest.mark.parametrize("single", [True, False])
-@pytest.mark.parametrize("baseline", ["laya", "gpt-6-luna-decisions"])
+@pytest.mark.parametrize(
+    "baseline,name,color",
+    [
+        ("laya", "Laya", "#56B4E9"),
+        ("gpt-6-luna-decisions", "GPT-6 Luna Decisions", "#882255"),
+        ("microsoft-decision-1", "Microsoft Decision-1", "#44AA99"),
+        ("scaledown-classify-1", "ScaleDown Classify-1", "#999933"),
+        ("pplx-decider-v1-1-27b", "Perplexity Decider v1.1 27B", "#661100"),
+        ("liquid-d1-ultra", "Liquid d1 Ultra", "#AA4499"),
+        ("jev-1-14-0", "Jev 1.14.0", "#117733"),
+    ],
+)
 def test_standalone_dashboard_supports_all_tasks_and_arbitrary_baselines(
-    saved_report, tmp_path, question_type, single, baseline
+    saved_report, tmp_path, question_type, single, baseline, name, color
 ):
-    models = (baseline,) if single else ("jev", "laya", "liquid-d1", "gpt-6-luna-decisions")
+    models = (
+        (baseline,)
+        if single
+        else (
+            "jev",
+            "laya",
+            "liquid-d1",
+            "gpt-6-luna-decisions",
+            "microsoft-decision-1",
+            "scaledown-classify-1",
+            "pplx-decider-v1-1-27b",
+            "liquid-d1-ultra",
+            "jev-1-14-0",
+        )
+    )
     run = saved_report(question_type, models, baseline)
     before = {str(path): file_checksum(path) for path in run.rglob("*") if path.is_file()}
     path = generate_dashboard(run, tmp_path / "export/index.html")
@@ -150,11 +175,9 @@ def test_standalone_dashboard_supports_all_tasks_and_arbitrary_baselines(
     assert "<svg" in document and "https://" not in document
     assert "Decision latency distribution" in document
     assert "(n=3)" in document  # Includes zero latency and failed decisions.
-    name = "Laya" if baseline == "laya" else "GPT-6 Luna Decisions"
     assert (f"Paired correctness · baseline: {name}" in document) != single
-    if "gpt-6-luna-decisions" in models:
-        assert "GPT-6 Luna Decisions" in document
-        assert "stroke='#882255'" in document
+    assert name in document
+    assert f"stroke='{color}'" in document
     assert ("Brier score" in document) == (question_type == "noul")
     assert ("Weighted kappa" in document) == (question_type == "score")
     assert {str(path): file_checksum(path) for path in run.rglob("*") if path.is_file()} == before

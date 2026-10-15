@@ -226,23 +226,42 @@ Each model table accepts:
 | `provider` | yes | Pinned upstream provider slug. |
 | `reasoning_effort` | optional, LLM only | `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`. |
 
-System One models must omit `reasoning_effort`. The routes are Jev (`typesafe-ai/jev`, provider
-`typesafe-ai`), Laya (`convaiinnovations/laya`, provider `boundless`), Liquid d1 (`liquid/d1`,
-provider `liquid`), and GPT-6 Luna Decisions (`openai/gpt-6-luna-decisions`, provider `openai`).
-Use Laya's standard ID. All models pin their provider with `gateway.only`.
+System One models must omit `reasoning_effort`. The hosted routes below were checked against
+[Gateway's TypeSafe model list](https://ai-gateway.vercel.sh/typesafe/v1/models) and public
+per-model provider endpoints on 2026-10-15:
+
+| Local `id` | Gateway `model` | Pinned `provider` |
+| --- | --- | --- |
+| `jev` | `typesafe-ai/jev` | `typesafe-ai` |
+| `laya` | `convaiinnovations/laya` | `boundless` |
+| `liquid-d1` | `liquid/d1` | `liquid` |
+| `gpt-6-luna-decisions` | `openai/gpt-6-luna-decisions` | `openai` |
+| `microsoft-decision-1` | `microsoft/microsoft-decision-1` | `azure` |
+| `scaledown-classify-1` | `scaledown/scaledown-classify-1` | `scaledown` |
+| `pplx-decider-v1-1-27b` | `perplexity/pplx-decider-v1.1-27b` | `perplexity` |
+| `liquid-d1-ultra` | `liquid/d1-ultra` | `liquid` |
+| `jev-1-14-0` | `typesafe-ai/jev-1.14.0` | `typesafe-ai` |
+
+Use Laya's standard ID. All models pin their provider with `gateway.only`. Local IDs use hyphens
+in place of version dots; the exact Gateway IDs retain their dots. The unversioned Jev alias may
+resolve to the same release as the pinned Jev entry. Freeze a versioned route for thesis runs.
 LLMs require native structured output support; virtual aliases and provider fallback lists are
 rejected. Historical frozen `jev` plans require their original code revision for resume.
 
-The three `*-system-one-smoke.toml` plans include all four routes and retain Jev as baseline.
-GPT-6 Luna Decisions uses the existing TypeSafe endpoint and Vercel credential:
+The three `*-system-one-smoke.toml` plans include all nine routes and retain Jev as baseline,
+with their existing training cohorts, question definitions, and concurrency. All additions use
+the existing TypeSafe endpoint, text state, Choice/Noul/Score types, and Vercel credential:
 
 ```toml
 [[models]]
-id = "gpt-6-luna-decisions"
+id = "microsoft-decision-1"
 backend = "system_one"
-model = "openai/gpt-6-luna-decisions"
-provider = "openai"
+model = "microsoft/microsoft-decision-1"
+provider = "azure"
 ```
+
+The five added routes have offline fixture coverage but have not had live inference validation.
+Run the training smoke plans before drawing conclusions about account access or provider limits.
 
 System One responses can refuse individual questions. These become `ModelRefusal` errors with
 the raw refusal in their diagnostics; successful answers and billed usage remain recorded.

@@ -166,7 +166,15 @@ def test_cannot_export_into_original_run(completed_run):
 @pytest.mark.parametrize("single_model", [False, True])
 @pytest.mark.parametrize(
     "baseline,display_name",
-    [("liquid-d1", "Liquid d1"), ("gpt-6-luna-decisions", "GPT-6 Luna Decisions")],
+    [
+        ("liquid-d1", "Liquid d1"),
+        ("gpt-6-luna-decisions", "GPT-6 Luna Decisions"),
+        ("microsoft-decision-1", "Microsoft Decision-1"),
+        ("scaledown-classify-1", "ScaleDown Classify-1"),
+        ("pplx-decider-v1-1-27b", "Perplexity Decider v1.1 27B"),
+        ("liquid-d1-ultra", "Liquid d1 Ultra"),
+        ("jev-1-14-0", "Jev 1.14.0"),
+    ],
 )
 def test_system_one_names_arbitrary_baseline_and_single_model_exports(
     completed_run, tmp_path, single_model, baseline, display_name

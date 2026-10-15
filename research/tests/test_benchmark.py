@@ -920,12 +920,22 @@ def test_system_one_training_smokes_match_routes_and_preserve_banking77_variants
             "laya",
             "liquid-d1",
             "gpt-6-luna-decisions",
+            "microsoft-decision-1",
+            "scaledown-classify-1",
+            "pplx-decider-v1-1-27b",
+            "liquid-d1-ultra",
+            "jev-1-14-0",
         ]
         assert [(model.model, model.provider) for model in plan.models] == [
             ("typesafe-ai/jev", "typesafe-ai"),
             ("convaiinnovations/laya", "boundless"),
             ("liquid/d1", "liquid"),
             ("openai/gpt-6-luna-decisions", "openai"),
+            ("microsoft/microsoft-decision-1", "azure"),
+            ("scaledown/scaledown-classify-1", "scaledown"),
+            ("perplexity/pplx-decider-v1.1-27b", "perplexity"),
+            ("liquid/d1-ultra", "liquid"),
+            ("typesafe-ai/jev-1.14.0", "typesafe-ai"),
         ]
     assert criteria.cohort.size == without.cohort.size == 1
     assert boolq.cohort.size == 2
