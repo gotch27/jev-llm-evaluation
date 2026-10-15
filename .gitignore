@@ -29,3 +29,5 @@ research/outputs/*
 # Independently served model checkpoints and local validation records
 model-serving/models/
 model-serving/outputs/
+model-training/models/
+model-training/outputs/
