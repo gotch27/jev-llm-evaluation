@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Sequence
 
+from thesis_model_clients import DecisionClient, create_decision_client
+
 from thesis_research.benchmark.model_records import (
     load_model_records,
     load_or_create_model_metadata,
@@ -21,7 +23,6 @@ from thesis_research.benchmark.progress import (
     NullBenchmarkObserver,
 )
 from thesis_research.benchmark.types import ModelSpec
-from thesis_research.clients import DecisionClient, create_decision_client
 from thesis_research.datasets import DatasetExample, ReferenceSchema
 from thesis_research.prediction import predict_examples
 from thesis_research.run_storage import write_json

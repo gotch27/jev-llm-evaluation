@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from thesis_model_clients import DecisionClient
+
 from thesis_research.benchmark.cohort import (
     cohort_record,
     examples_from_cohort,
@@ -27,7 +29,6 @@ from thesis_research.benchmark.report import generate_report, report_artifacts
 from thesis_research.benchmark.timing import runner_environment
 from thesis_research.benchmark.types import BenchmarkPlan
 from thesis_research.benchmark.validation import validate_image_models, validate_task_images
-from thesis_research.clients import DecisionClient
 from thesis_research.config import load_task_config
 from thesis_research.datasets import (
     DatasetExample,

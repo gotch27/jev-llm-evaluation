@@ -33,6 +33,14 @@ dependency versions.
 
 ## Structured model clients
 
+Model calling lives in the independent [shared model clients package](../model-clients/README.md).
+`uv sync --locked` installs it as an editable local dependency. Benchmark code imports
+`thesis_model_clients`, and other thesis projects can use the same package without installing
+research. The shared package owns clients, result contracts, image transports, and JSON result
+serialization. Dataset mapping, cohorts, metrics, and resumable benchmark files stay here.
+For direct calls from another folder, see its [setup and use guide](../model-clients/README.md#setup-and-use-from-another-folder)
+and [runnable example](../model-clients/examples/classify_message.py).
+
 Both clients accept the same state and TypeSafe `Choice`, `Score`, and `Noul` questions and
 return a `DecisionResult`. A System One model receives the complete question set in one request.
 An LLM receives one isolated request per question; those requests run concurrently with at most five active by
@@ -46,7 +54,7 @@ while keeping the TypeSafe Python SDK and its native state-and-questions interfa
 import asyncio
 
 from dotenv import load_dotenv
-from thesis_research.clients import VercelSystemOneDecisionClient
+from thesis_model_clients import VercelSystemOneDecisionClient
 from typesafe_sdk import Choice
 
 
@@ -203,7 +211,7 @@ model/provider must support native JSON-schema output.
 import asyncio
 
 from dotenv import load_dotenv
-from thesis_research.clients import VercelLLMDecisionClient
+from thesis_model_clients import VercelLLMDecisionClient
 from typesafe_sdk import Choice
 
 
@@ -873,8 +881,8 @@ uv run ruff format --check .
 - `src/thesis_research/datasets/`: shared typed examples, dataset registry, and pinned adapters.
 - `src/thesis_research/config.py`: typed, validated task configuration.
 - `src/thesis_research/tasks/`: validated state and question construction.
-- `src/thesis_research/clients/`: shared result contracts, hosted System One and LLM clients
-  through Vercel AI Gateway, and self-hosted TypeSafe HTTP clients.
+- `../model-clients/src/thesis_model_clients/`: independent model clients, result contracts,
+  image transport, and JSON serialization shared with other thesis use cases.
 - `src/thesis_research/prediction.py`: bounded prediction and result serialization.
 - `src/thesis_research/benchmark/`: plans, shared cohorts, resumable model runs, and reports.
 - `src/thesis_research/benchmark/model_records.py`: model-record validation and metric summaries.

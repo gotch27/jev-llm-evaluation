@@ -3,9 +3,10 @@
 import base64
 import json
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
-from thesis_datasets.images import ImageAsset
+from thesis_datasets.images import ImageAsset, image_metadata
 
 ImageInputs = Mapping[str, ImageAsset]
 IMAGE_HEADERS = {"TypeSafe-Danger-Zone-Images": "true"}
@@ -26,6 +27,14 @@ _ASSET_ROUTE_FAILURES = {
         "Gateway TypeSafe image-asset request returned HTTP 400"
     ),
 }
+
+
+def load_image(path: Path) -> ImageAsset:
+    """Inspect a local PNG/JPEG for a standalone call, without publishing a dataset."""
+    path = path.resolve(strict=True)
+    asset = ImageAsset(path, image_metadata(path.read_bytes()))
+    validate_image_inputs({"image": asset})
+    return asset
 
 
 def image_capability(backend: str, model: str, provider: str, transport: str = "vercel") -> dict:

@@ -5,12 +5,10 @@ description = "Experiments comparing Jev and large language models"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "httpx2>=2.13,<3",
-    "openai>=3.16,<4",
     "thesis-datasets[images,parquet]",
+    "thesis-model-clients",
     "python-dotenv>=1.1,<2",
     "rich>=14,<15",
-    "system-one-adapter[openai]>=0.2,<0.3",
     "typesafe-sdk>=0.7,<0.8",
 ]
 
@@ -19,6 +17,7 @@ thesis-research = "thesis_research.cli:main"
 
 [tool.uv.sources]
 thesis-datasets = { path = "../datasets", editable = true }
+thesis-model-clients = { path = "../model-clients", editable = true }
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

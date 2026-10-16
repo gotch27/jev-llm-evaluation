@@ -9,8 +9,8 @@ from system_one_adapter.providers import Message, ProviderResult, translating
 from system_one_adapter.providers.openai import AsyncOpenAIProvider
 from typesafe_sdk import TypeSafeError
 
-from thesis_research.clients.contracts import DEFAULT_TIMEOUT_SECONDS
-from thesis_research.clients.gateway_metadata import reported_cost, resolved_provider
+from thesis_model_clients.contracts import DEFAULT_TIMEOUT_SECONDS
+from thesis_model_clients.gateway_metadata import reported_cost, resolved_provider
 
 VERCEL_AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1"
 REASONING_EFFORTS = frozenset({"none", "minimal", "low", "medium", "high", "xhigh"})

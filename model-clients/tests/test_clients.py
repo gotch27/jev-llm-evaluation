@@ -18,15 +18,15 @@ from typesafe_sdk import (
     Usage,
 )
 
-from thesis_research.clients import (
+from thesis_model_clients import (
     TypeSafeHTTPDecisionClient,
     VercelLLMDecisionClient,
     VercelSystemOneDecisionClient,
 )
-from thesis_research.clients import system_one as system_one_module
-from thesis_research.clients import vercel_provider as vercel_provider_module
-from thesis_research.clients.gateway_metadata import reported_cost, resolved_provider
-from thesis_research.clients.vercel_provider import (
+from thesis_model_clients import system_one as system_one_module
+from thesis_model_clients import vercel_provider as vercel_provider_module
+from thesis_model_clients.gateway_metadata import reported_cost, resolved_provider
+from thesis_model_clients.vercel_provider import (
     VercelGatewayProvider,
     VercelGatewayProviderResult,
 )
@@ -871,7 +871,7 @@ def test_system_one_http_evaluation_cancellation_releases_concurrency(monkeypatc
 
 @pytest.mark.parametrize("model,provider", HTTP_SYSTEM_ONE_ROUTES)
 def test_factory_selects_generic_system_one_client_without_llm_output(monkeypatch, model, provider):
-    from thesis_research.clients import create_decision_client
+    from thesis_model_clients import create_decision_client
 
     monkeypatch.setenv("AI_GATEWAY_API_KEY", "unused-test-key")
     settings = (
@@ -898,7 +898,7 @@ def test_factory_selects_generic_system_one_client_without_llm_output(monkeypatc
     ],
 )
 def test_factory_rejects_missing_or_retired_settings(backend, provider, mode, reasoning, error):
-    from thesis_research.clients import create_decision_client
+    from thesis_model_clients import create_decision_client
 
     with pytest.raises(ValueError, match=error):
         create_decision_client(

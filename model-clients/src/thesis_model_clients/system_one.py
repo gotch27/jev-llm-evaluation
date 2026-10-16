@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 import httpx2
 from typesafe_sdk import AsyncTypeSafeClient, JSONContent, Questions, RetryPolicy, TypeSafeError
 
-from thesis_research.clients.contracts import (
+from thesis_model_clients.contracts import (
     DEFAULT_MAX_CONCURRENCY,
     DEFAULT_TIMEOUT_SECONDS,
     CallRecord,
@@ -28,8 +28,8 @@ from thesis_research.clients.contracts import (
     aggregate_usage,
     unique_non_null,
 )
-from thesis_research.clients.gateway_metadata import reported_cost, resolved_provider
-from thesis_research.images import (
+from thesis_model_clients.gateway_metadata import reported_cost, resolved_provider
+from thesis_model_clients.images import (
     IMAGE_HEADERS,
     IMAGE_REQUEST_LIMIT_BYTES,
     ImageInputs,

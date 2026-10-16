@@ -8,7 +8,7 @@ from typing import Any, Protocol, Self
 
 from typesafe_sdk import Answer, JSONContent, Questions
 
-from thesis_research.images import ImageInputs
+from thesis_model_clients.images import ImageInputs
 
 DEFAULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_MAX_CONCURRENCY = 5

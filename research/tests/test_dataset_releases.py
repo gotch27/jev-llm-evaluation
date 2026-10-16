@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 from thesis_datasets.releases import publish_release
+from thesis_model_clients import DecisionResult, UsageTotals
 from typesafe_sdk import ScoreAnswer
 
 from thesis_research.benchmark import resume_benchmark, run_benchmark
 from thesis_research.benchmark.plan import load_benchmark_plan
-from thesis_research.clients import DecisionResult, UsageTotals
 from thesis_research.config import DatasetConfig, load_task_config
 from thesis_research.datasets import (
     ChoiceReference,

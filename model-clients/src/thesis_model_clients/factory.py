@@ -1,11 +1,11 @@
 """Construction of configured decision clients."""
 
-from thesis_research.clients.contracts import DecisionClient
-from thesis_research.clients.system_one import (
+from thesis_model_clients.contracts import DecisionClient
+from thesis_model_clients.system_one import (
     TypeSafeHTTPDecisionClient,
     VercelSystemOneDecisionClient,
 )
-from thesis_research.clients.vercel_llm import VercelLLMDecisionClient
+from thesis_model_clients.vercel_llm import VercelLLMDecisionClient
 
 
 def create_decision_client(

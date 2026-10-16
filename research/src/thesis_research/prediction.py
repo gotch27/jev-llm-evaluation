@@ -8,11 +8,18 @@ import math
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal, TextIO
+from typing import Any, TextIO
 
+from thesis_model_clients import (
+    DecisionClient,
+    DecisionError,
+    DecisionResult,
+    UsageTotals,
+    decision_result_to_dict,
+)
+from thesis_model_clients.serialization import AnswerOutputMode, validate_answer_output_mode
 from typesafe_sdk import ChoiceAnswer, NoulAnswer, ScoreAnswer
 
-from thesis_research.clients import DecisionClient, DecisionError, DecisionResult, UsageTotals
 from thesis_research.datasets import (
     ChoiceReferenceSchema,
     DatasetExample,
@@ -22,8 +29,6 @@ from thesis_research.datasets import (
 )
 from thesis_research.evaluation import prediction_status
 from thesis_research.tasks import StructuredTask
-
-AnswerOutputMode = Literal["discrete", "probabilities", "native_probabilities"]
 
 _USAGE_FIELDS = (
     "input_tokens",
@@ -95,7 +100,7 @@ async def predict_examples(
     on_prediction: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Validate states, evaluate bounded batches, and stream ordered records."""
-    _validate_output_mode(answer_output_mode)
+    validate_answer_output_mode(answer_output_mode)
     record_answer_details = answer_output_mode != "discrete"
     if max_concurrency < 1:
         raise ValueError("max_concurrency must be at least 1")
@@ -154,53 +159,6 @@ async def predict_examples(
 
     summary.elapsed_seconds = time.perf_counter() - started
     return summary.as_dict()
-
-
-def decision_result_to_dict(
-    result: DecisionResult,
-    *,
-    answer_output_mode: AnswerOutputMode = "probabilities",
-) -> dict[str, Any]:
-    """Convert a provider-neutral decision result into a JSON-safe record."""
-    _validate_output_mode(answer_output_mode)
-    record_answer_details = answer_output_mode != "discrete"
-    return {
-        "answers": {
-            question_id: _answer_to_dict(answer, record_answer_details)
-            for question_id, answer in result.answers.items()
-        },
-        "answer_output_mode": answer_output_mode,
-        "errors": {
-            question_id: _error_to_dict(error) for question_id, error in result.errors.items()
-        },
-        "requested_model": result.requested_model,
-        "requested_provider": result.requested_provider,
-        "resolved_models": list(result.resolved_models),
-        "resolved_providers": list(result.resolved_providers),
-        "usage": asdict(result.usage),
-        "latency_seconds": result.latency_seconds,
-        "calls": [
-            {
-                "question_ids": list(call.question_ids),
-                "requested_model": call.requested_model,
-                "resolved_model": call.resolved_model,
-                "requested_provider": call.requested_provider,
-                "resolved_provider": call.resolved_provider,
-                "latency_seconds": call.latency_seconds,
-                "usage": asdict(call.usage),
-                "error": _error_to_dict(call.error) if call.error is not None else None,
-                "raw": call.raw,
-            }
-            for call in result.calls
-        ],
-    }
-
-
-def _validate_output_mode(mode: str) -> None:
-    if mode not in ("discrete", "probabilities", "native_probabilities"):
-        raise ValueError(
-            "answer_output_mode must be discrete, probabilities, or native_probabilities"
-        )
 
 
 def _prediction_record(
@@ -321,29 +279,9 @@ def _score_prediction(
     return prediction, True
 
 
-def _answer_to_dict(answer: object, details: bool) -> object:
-    if not details:
-        if isinstance(answer, ChoiceAnswer):
-            return {"type": "choice", "choice": answer.choice}
-        if isinstance(answer, NoulAnswer):
-            return {"type": "noul", "value": answer.noul >= 0.5}
-        if isinstance(answer, ScoreAnswer):
-            return {"type": "score", "score": answer.score}
-    model_dump = getattr(answer, "model_dump", None)
-    return model_dump(mode="json") if callable(model_dump) else answer
-
-
 def _prediction_error(error: DecisionError) -> str:
     message = error.message.strip() or "No error message was supplied"
     return f"{error.error_type}: {message}"
-
-
-def _error_to_dict(error: DecisionError) -> dict[str, Any]:
-    return {
-        "error_type": error.error_type,
-        "message": error.message,
-        "diagnostics": error.diagnostics,
-    }
 
 
 def _write_json_line(handle: TextIO, value: dict[str, Any]) -> None:

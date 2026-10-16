@@ -1,9 +1,11 @@
 # Jev graduate thesis
 
-One repository for thesis notes, shared datasets, Python research code, and independent local model serving.
+One repository for thesis notes, shared datasets and model clients, Python research code, and
+independent local model serving.
 
 - [Thesis home](vault/Thesis%20Home.md): direction, use cases, and research notes.
 - [Research setup](research/README.md): Python environment and code organization.
+- [Shared model clients](model-clients/README.md): call System One models and LLMs from any use case.
 - [Shared datasets](datasets/README.md): frozen versions used by benchmarking and remote fine-tuning.
 - [Local model serving](model-serving/README.md): a separate environment for serving Laya checkpoints.
 - [Model training workspace](model-training/README.md): index of experiment-specific training work.
@@ -19,10 +21,12 @@ Data preparation and frozen JSONL releases live in `datasets/`. Each release rec
 source revision, exact prepared version, split checksums, and target schema. Training and research
 consume the same releases; model instructions and training exports stay in their respective projects.
 
-The research code includes pinned dataset adapters, structured System One and LLM clients,
-resumable benchmarks, and evaluation reports. It can call Vercel or any TypeSafe-compatible HTTP
-service. The separate model-serving project loads checkpoints; the two projects communicate only
-over HTTP. Development runs are tracked separately from the final thesis evaluation.
+The independent `model-clients/` package owns structured System One and LLM calls, image
+transport, and result records. `research/` depends on it for resumable benchmarks and evaluation
+reports; other thesis use cases can install the same package without installing research.
+The clients use Vercel or any TypeSafe-compatible HTTP service. The separate model-serving
+project loads checkpoints and communicates with callers over HTTP. Development runs are tracked
+separately from the final thesis evaluation.
 
 ## Training experiments
 

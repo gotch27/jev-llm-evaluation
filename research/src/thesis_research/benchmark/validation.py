@@ -3,12 +3,13 @@
 from collections.abc import Sequence
 from pathlib import Path
 
+from thesis_model_clients.images import image_capability, validate_image_request
+
 from thesis_research.benchmark.cohort import select_cohort
 from thesis_research.benchmark.plan import load_benchmark_plan
 from thesis_research.benchmark.types import BenchmarkPlan
 from thesis_research.config import TaskConfig, load_task_config
 from thesis_research.datasets import DatasetExample, load_prepared_dataset
-from thesis_research.images import image_capability, validate_image_request
 from thesis_research.tasks import StructuredTask, build_structured_task
 
 

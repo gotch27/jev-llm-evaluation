@@ -1,0 +1,40 @@
+[project]
+name = "thesis-model-clients"
+version = "0.1.0"
+description = "Shared structured System One and LLM clients for thesis use cases"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "httpx2>=2.13,<3",
+    "openai>=3.16,<4",
+    "system-one-adapter[openai]>=0.2,<0.3",
+    "thesis-datasets[images]",
+    "typesafe-sdk>=0.7,<0.8",
+]
+
+[tool.uv.sources]
+thesis-datasets = { path = "../datasets", editable = true }
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/thesis_model_clients"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/examples", "/README.md", "/pyproject.toml", "/uv.lock"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"

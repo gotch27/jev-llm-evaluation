@@ -5,6 +5,8 @@ import tomllib
 from pathlib import Path
 from typing import Any, cast
 
+from thesis_model_clients.system_one import validate_http_settings
+
 from thesis_research.benchmark.types import (
     Backend,
     BenchmarkPlan,
@@ -18,7 +20,6 @@ from thesis_research.benchmark.types import (
     ReasoningEffort,
     Transport,
 )
-from thesis_research.clients.system_one import validate_http_settings
 
 _MODEL_ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}

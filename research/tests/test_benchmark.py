@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from thesis_model_clients import CallRecord, DecisionError, DecisionResult, UsageTotals
 from typesafe_sdk import ChoiceAnswer
 
 from thesis_research.benchmark import resume_benchmark, run_benchmark
@@ -15,7 +16,6 @@ from thesis_research.benchmark.plan import load_benchmark_plan
 from thesis_research.benchmark.progress import ModelProgress, NullBenchmarkObserver
 from thesis_research.benchmark.report import exact_mcnemar_p_value
 from thesis_research.benchmark.types import CohortSpec
-from thesis_research.clients import CallRecord, DecisionError, DecisionResult, UsageTotals
 from thesis_research.config import load_task_config
 from thesis_research.datasets import (
     ChoiceReference,

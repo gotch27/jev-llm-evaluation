@@ -12,7 +12,7 @@ from typing import Any, Literal, Self
 from system_one_adapter import AsyncSystemOneAdapterClient
 from typesafe_sdk import Answer, JSONContent, Questions, RetryPolicy, TypeSafeError
 
-from thesis_research.clients.contracts import (
+from thesis_model_clients.contracts import (
     DEFAULT_MAX_CONCURRENCY,
     DEFAULT_TIMEOUT_SECONDS,
     CallRecord,
@@ -23,15 +23,15 @@ from thesis_research.clients.contracts import (
     aggregate_usage,
     unique_non_null,
 )
-from thesis_research.clients.vercel_provider import (
-    REASONING_EFFORTS,
-    VercelGatewayProvider,
-)
-from thesis_research.images import (
+from thesis_model_clients.images import (
     ImageInputs,
     chat_image_parts,
     image_capability,
     validate_image_request,
+)
+from thesis_model_clients.vercel_provider import (
+    REASONING_EFFORTS,
+    VercelGatewayProvider,
 )
 
 

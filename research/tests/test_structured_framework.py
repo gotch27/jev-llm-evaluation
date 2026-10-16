@@ -10,6 +10,12 @@ import httpx2
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+from thesis_model_clients import (
+    CallRecord,
+    DecisionResult,
+    UsageTotals,
+    VercelSystemOneDecisionClient,
+)
 from typesafe_sdk import Choice, ChoiceAnswer, Noul, NoulAnswer, Score, ScoreAnswer
 
 from thesis_research.benchmark.cohort import (
@@ -21,12 +27,6 @@ from thesis_research.benchmark.plan import load_benchmark_plan
 from thesis_research.benchmark.report import generate_report
 from thesis_research.benchmark.runner import resume_benchmark, run_benchmark
 from thesis_research.benchmark.types import CohortSpec
-from thesis_research.clients import (
-    CallRecord,
-    DecisionResult,
-    UsageTotals,
-    VercelSystemOneDecisionClient,
-)
 from thesis_research.config import load_task_config
 from thesis_research.datasets import (
     ChoiceReference,
