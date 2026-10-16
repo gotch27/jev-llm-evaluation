@@ -27,6 +27,12 @@ from thesis_research.clients.vercel_provider import (
     REASONING_EFFORTS,
     VercelGatewayProvider,
 )
+from thesis_research.images import (
+    ImageInputs,
+    chat_image_parts,
+    image_capability,
+    validate_image_request,
+)
 
 
 @dataclass(frozen=True)
@@ -108,12 +114,15 @@ class VercelLLMDecisionClient(DecisionClient):
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._closed = False
 
-    async def evaluate(self, state: JSONContent, questions: Questions) -> DecisionResult:
+    async def evaluate(
+        self, state: JSONContent, questions: Questions, *, images: ImageInputs | None = None
+    ) -> DecisionResult:
         """Evaluate each question concurrently and combine their outcomes.
 
         Args:
             state: JSON-compatible information each question refers to.
             questions: TypeSafe questions keyed by stable question ID.
+            images: Verified image assets keyed by top-level state field.
 
         Returns:
             Successful typed answers, per-question errors, aggregate usage,
@@ -129,8 +138,17 @@ class VercelLLMDecisionClient(DecisionClient):
         if not questions:
             raise ValueError("At least one question is required")
         started = time.perf_counter()
+        parts = None
+        if images:
+            image_capability("llm", self.requested_model, self.requested_provider)
+            validate_image_request(state, questions, images)
+            if not isinstance(self._provider, VercelGatewayProvider):
+                raise ValueError(
+                    "Injected providers must implement the image-aware Gateway transport"
+                )
+            parts = chat_image_parts(images)
         tasks = [
-            asyncio.create_task(self._evaluate_one(state, question_id, question))
+            asyncio.create_task(self._evaluate_one(state, question_id, question, image_parts=parts))
             for question_id, question in questions.items()
         ]
         evaluations = list(await asyncio.gather(*tasks))
@@ -162,7 +180,10 @@ class VercelLLMDecisionClient(DecisionClient):
         state: JSONContent,
         question_id: str,
         question: Any,
+        *,
+        image_parts: list[dict] | None = None,
     ) -> _QuestionEvaluation:
+        image_token = self._provider.image_parts.set(image_parts) if image_parts else None
         try:
             async with self._semaphore:
                 started = time.perf_counter()
@@ -189,6 +210,9 @@ class VercelLLMDecisionClient(DecisionClient):
                 ),
                 answer=None,
             )
+        finally:
+            if image_token is not None:
+                self._provider.image_parts.reset(image_token)
         raw = response.model_dump(mode="json")
         provider_result = _provider_result(raw)
         return _QuestionEvaluation(

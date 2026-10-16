@@ -32,9 +32,13 @@ class StateConfig:
     """Map task-state keys to source fields supplied by a dataset adapter."""
 
     fields: tuple[tuple[str, str], ...]
+    images: tuple[tuple[str, str], ...] = ()
 
     def as_dict(self) -> dict[str, dict[str, str]]:
-        return {"fields": dict(self.fields)}
+        value = {"fields": dict(self.fields)}
+        if self.images:
+            value["images"] = dict(self.images)
+        return value
 
 
 @dataclass(frozen=True)
@@ -153,7 +157,7 @@ def _parse_task(value: dict[str, Any]) -> TaskConfig:
     if not isinstance(dataset, dict):
         raise ValueError("dataset must be a table")
     _require_fields(dataset, {"id", "revision"}, {"id", "revision", "version"}, "dataset")
-    return TaskConfig(
+    config = TaskConfig(
         name=_nonempty_string(value["name"], "Task name"),
         dataset=DatasetConfig(
             _nonempty_string(dataset["id"], "dataset id"),
@@ -163,6 +167,9 @@ def _parse_task(value: dict[str, Any]) -> TaskConfig:
         state=_parse_state(value["state"]),
         question=_parse_question(value["question"]),
     )
+    if config.state.images and config.dataset.version is None:
+        raise ValueError("Image tasks require an explicit published dataset version")
+    return config
 
 
 def _dataset_version(value: object) -> str:
@@ -175,18 +182,26 @@ def _dataset_version(value: object) -> str:
 def _parse_state(value: object) -> StateConfig:
     if not isinstance(value, dict):
         raise ValueError("state must be a table")
-    _require_fields(value, {"fields"}, {"fields"}, "state")
-    fields = value["fields"]
-    if not isinstance(fields, dict) or not fields:
-        raise ValueError("state.fields must be a nonempty table")
-    parsed = tuple(
-        (
-            _nonempty_string(output, "state field name"),
-            _nonempty_string(source, f"state.fields.{output}"),
+    _require_fields(value, set(), {"fields", "images"}, "state")
+    mappings = []
+    for kind in ("fields", "images"):
+        entries = value.get(kind, {})
+        if not isinstance(entries, dict) or (kind in value and not entries):
+            raise ValueError(f"state.{kind} must be a nonempty table")
+        mappings.append(
+            tuple(
+                (
+                    _nonempty_string(output, "state field name"),
+                    _nonempty_string(source, f"state.{kind}.{output}"),
+                )
+                for output, source in entries.items()
+            )
         )
-        for output, source in fields.items()
-    )
-    return StateConfig(parsed)
+    if not any(mappings):
+        raise ValueError("state.fields or state.images must be a nonempty table")
+    if set(dict(mappings[0])) & set(dict(mappings[1])):
+        raise ValueError("state.fields and state.images must use distinct output names")
+    return StateConfig(fields=mappings[0], images=mappings[1])
 
 
 def _parse_question(value: object) -> QuestionConfig:

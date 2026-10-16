@@ -1,9 +1,10 @@
 """Shared contracts for prepared supervised datasets."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol, TypeAlias
 
+from thesis_datasets.images import ImageAsset
 from typesafe_sdk import JSONContent
 
 QuestionType = Literal["choice", "noul", "score"]
@@ -83,6 +84,7 @@ class PreparedDataset:
     examples: tuple[DatasetExample, ...]
     reference_schema: ReferenceSchema
     manifest: dict
+    image_assets: dict[str, ImageAsset] = field(default_factory=dict)
 
 
 class DatasetAdapter(Protocol):

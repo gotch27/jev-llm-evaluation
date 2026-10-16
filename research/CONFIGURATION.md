@@ -50,6 +50,57 @@ Yelp/SNIPS bilingual releases expose `text_en` and `text_mk`. Select one explici
 The checked-in Yelp/SNIPS tasks pin the published snapshot used during this migration. Publish a
 different prepared export as a new version and update a new task file; do not edit a frozen run.
 
+### Image state
+
+Image tasks must pin `dataset.version` to a published image release. Any dataset ID with a valid
+shared release can be loaded without adding a source downloader. Map top-level image inputs with
+`[state.images]`; the publisher stores their bytes and provenance as described in
+[Image releases](../datasets/README.md#image-releases). For an image-only Noul task, use this
+fragment after the pinned `[dataset]` table:
+
+```toml
+[state.images]
+photo = "photo"
+
+[question]
+type = "noul"
+id = "visible_damage"
+instructions = "Does the product in `photo` show visible damage?"
+```
+
+`[state.fields]` can accompany images for text such as a question or product description. At
+least one mapping table is required; each supplied table must be nonempty, and output names
+must be distinct. Mapping an image reference through `state.fields` is an error. The current
+image support covers state inputs, with the existing Choice/Noul/Score definitions and metrics.
+Box and images inside question definitions are unsupported.
+
+All participants receive the same image bytes. The initial shared contract accepts still PNG
+and JPEG images: 256–1568 pixels per side, 78,400–2,458,624 total pixels, at most 16 MiB per file,
+and a conservative 32 MiB encoded-request budget. Preparation must produce compliant images;
+benchmark execution performs no resizing or other image transformations.
+
+Enabled image routes are Jev 1.14.0 / `typesafe-ai` and GPT-6 Luna Decisions / `openai` using the
+TypeSafe API, plus the existing GPT-5.6 Luna / `openai`, Gemini 2.5 Flash Lite / `google`, and
+Qwen 3.5 Flash / `alibaba` chat routes. The exact model/provider combination is required.
+Jev and GPT-6 Luna Decisions had live Noul connectivity checks; the LLM chat image paths have
+offline transport tests and catalog evidence. The unversioned Jev route, local services, unknown
+routes, Laya, Microsoft, and ScaleDown are blocked for image tasks. Liquid d1, d1 Ultra, and
+Perplexity advertise vision, but their TypeSafe asset requests failed in live checks and remain
+blocked for this encoding. Their text configurations continue to work.
+
+Every model's capability is checked before creating a benchmark or constructing clients. All
+incompatibilities are reported together, and the plan is rejected as a whole. Every prepared
+image input is checked before model execution. New image runs record the capability snapshot;
+unfinished resumes require that snapshot and the frozen image checksums to still match.
+
+Validate a selected plan and its data without credentials, model calls, or output creation:
+
+```sh
+uv run thesis-research validate --plan path/to/image-benchmark.toml
+```
+
+The regular `benchmark` command performs the same image checks automatically.
+
 `[state.fields]` maps the keys sent to the model to source fields supplied by the dataset adapter.
 For example, `customer_message = "text"` sends `{"customer_message": row["text"]}`. BoolQ maps
 both `passage` and `question`; the hidden `answer` field is never included in the state.

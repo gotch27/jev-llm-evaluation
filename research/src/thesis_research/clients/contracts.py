@@ -8,6 +8,8 @@ from typing import Any, Protocol, Self
 
 from typesafe_sdk import Answer, JSONContent, Questions
 
+from thesis_research.images import ImageInputs
+
 DEFAULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_MAX_CONCURRENCY = 5
 
@@ -111,7 +113,9 @@ class DecisionClient(Protocol):
     their underlying HTTP connections reliably.
     """
 
-    async def evaluate(self, state: JSONContent, questions: Questions) -> DecisionResult:
+    async def evaluate(
+        self, state: JSONContent, questions: Questions, *, images: ImageInputs | None = None
+    ) -> DecisionResult:
         """Evaluate typed questions against a state."""
         ...
 

@@ -11,6 +11,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from thesis_research.benchmark import resume_benchmark, run_benchmark
+from thesis_research.benchmark.validation import validate_benchmark
 from thesis_research.config import load_task_config
 from thesis_research.datasets import load_prepared_dataset, prepare_dataset, reference_class
 from thesis_research.reporting import generate_dashboard
@@ -26,6 +27,13 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
     try:
+        if args.command == "validate":
+            print(
+                json.dumps(
+                    validate_benchmark(args.plan, args.data_dir), ensure_ascii=False, indent=2
+                )
+            )
+            return
         if args.command == "report":
             output = args.output_dir or Path("outputs/reports") / args.run.resolve().name
             if output.resolve().is_relative_to(args.run.resolve()):
@@ -102,6 +110,10 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_shared_arguments(inspect)
     inspect.add_argument("--limit", type=int, default=5)
     inspect.add_argument("--split", default="train")
+
+    validate = commands.add_parser("validate", help="Check a plan and its data without model calls")
+    validate.add_argument("--plan", type=Path, required=True)
+    validate.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIRECTORY)
 
     benchmark = commands.add_parser("benchmark", help="Run or resume a coordinated benchmark")
     source = benchmark.add_mutually_exclusive_group(required=True)

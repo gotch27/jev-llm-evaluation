@@ -7,6 +7,7 @@ dependencies = []
 
 [project.optional-dependencies]
 parquet = ["pyarrow>=25,<26"]
+images = ["pillow>=12,<13"]
 
 [project.scripts]
 thesis-datasets = "thesis_datasets.cli:main"

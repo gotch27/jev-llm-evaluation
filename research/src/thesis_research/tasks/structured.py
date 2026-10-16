@@ -2,8 +2,10 @@
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import cached_property
 
+from thesis_datasets.images import ImageAsset
 from typesafe_sdk import Choice, JSONContent, Noul, Questions, Score
 
 from thesis_research.config import (
@@ -32,6 +34,12 @@ class StructuredTask:
     question_id: str
     question_type: QuestionType
     question: StructuredQuestion
+    image_fields: tuple[tuple[str, str], ...] = ()
+    image_assets: dict[str, ImageAsset] = field(default_factory=dict)
+
+    @cached_property
+    def _assets_by_hash(self) -> dict[str, ImageAsset]:
+        return {asset.metadata["sha256"]: asset for asset in self.image_assets.values()}
 
     def validate_state_fields(self, examples: Sequence[DatasetExample]) -> None:
         """Check every mapped source field across the split before model calls.
@@ -59,6 +67,11 @@ class StructuredTask:
                 )
         if problems:
             raise ValueError("Invalid task state mappings: " + "; ".join(problems))
+        for example in examples:
+            try:
+                self.build_state(example.state)
+            except ValueError as error:
+                raise ValueError(f"Invalid task input at {example.id}: {error}") from error
 
     def build_state(self, source: Mapping[str, JSONContent]) -> dict[str, JSONContent]:
         """Map model input keys (left) to dataset source fields (right)."""
@@ -69,17 +82,39 @@ class StructuredTask:
             if source_name not in source:
                 raise ValueError(f"Dataset example is missing source field: {source_name}")
             value = source[source_name]
+            if isinstance(value, dict) and value.get("type") == "image":
+                raise ValueError(f"Image source {source_name!r} must be mapped with state.images")
             if isinstance(value, str) and not value:
                 raise ValueError(f"Dataset source field must be nonempty: {source_name}")
             state[output_name] = value
+        for output_name, source_name in self.image_fields:
+            value = source.get(source_name)
+            if (
+                not isinstance(value, dict)
+                or set(value) != {"type", "asset"}
+                or value.get("type") != "image"
+                or not isinstance(value.get("asset"), str)
+                or value["asset"] not in self.image_assets
+            ):
+                raise ValueError(f"Image source {source_name!r} needs a verified release asset")
+            state[output_name] = {"type": "image", **self.image_assets[value["asset"]].metadata}
         return state
+
+    def image_inputs(self, state: dict) -> dict[str, ImageAsset]:
+        """Resolve opaque frozen state descriptors to the verified local image files."""
+        return {name: self._assets_by_hash[state[name]["sha256"]] for name, _ in self.image_fields}
 
     def questions(self) -> Questions:
         """Return the one-question mapping shared by every model."""
         return {self.question_id: self.question}
 
 
-def build_structured_task(config: TaskConfig, schema: ReferenceSchema) -> StructuredTask:
+def build_structured_task(
+    config: TaskConfig,
+    schema: ReferenceSchema,
+    *,
+    image_assets: dict[str, ImageAsset] | None = None,
+) -> StructuredTask:
     """Validate a task against its dataset reference schema and build it."""
     question_config = config.question
     if question_config.question_type != schema.question_type:
@@ -137,6 +172,8 @@ def build_structured_task(config: TaskConfig, schema: ReferenceSchema) -> Struct
         question_id=question_config.question_id,
         question_type=question_config.question_type,
         question=question,
+        image_fields=config.state.images,
+        image_assets=image_assets or {},
     )
 
 

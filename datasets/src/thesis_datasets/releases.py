@@ -8,6 +8,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from thesis_datasets.images import (
+    image_metadata,
+    load_image_assets,
+    validate_image_references,
+)
+
 SCHEMA_VERSION = 1
 
 
@@ -131,16 +137,28 @@ def publish_release(
     splits: dict[str, list[dict]],
     reference_schema: dict,
     provenance: dict,
+    *,
+    image_assets: dict[str, Path] | None = None,
 ) -> Path:
     """Publish atomically; identical content reuses a verified immutable release."""
     _component(dataset_id)
     if not isinstance(source_revision, str) or not source_revision.strip():
         raise ValueError("Source revision must be explicit")
     _validate_rows(splits, reference_schema)
+    validate_image_references(splits, image_assets or {})
     base = root / "releases" / dataset_id
     base.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".publishing-", dir=base) as temporary:
         staged = Path(temporary)
+        assets = {}
+        for asset_id, source in (image_assets or {}).items():
+            data = Path(source).read_bytes()
+            record = image_metadata(data)
+            suffix = "png" if record["media_type"] == "image/png" else "jpg"
+            relative = f"assets/{record['sha256']}.{suffix}"
+            (staged / "assets").mkdir(exist_ok=True)
+            (staged / relative).write_bytes(data)
+            assets[asset_id] = {"path": relative, **record}
         files = {}
         for split, rows in splits.items():
             path = staged / f"{split}.jsonl"
@@ -149,13 +167,15 @@ def publish_release(
                     stream.write(encoded(row) + b"\n")
             files[split] = {"path": path.name, "sha256": checksum(path), "rows": len(rows)}
         identity = {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": 2 if assets else SCHEMA_VERSION,
             "dataset_id": dataset_id,
             "source_revision": source_revision,
             "reference_schema": reference_schema,
             "files": files,
             "provenance": provenance,
         }
+        if assets:
+            identity["assets"] = assets
         version = hashlib.sha256(encoded(identity)).hexdigest()
         manifest = {**identity, "version": version}
         (staged / "manifest.json").write_bytes(encoded(manifest) + b"\n")
@@ -181,7 +201,7 @@ def load_release(
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
     if (
         not isinstance(manifest, dict)
-        or manifest.get("schema_version") != SCHEMA_VERSION
+        or manifest.get("schema_version") not in {SCHEMA_VERSION, 2}
         or manifest.get("dataset_id") != dataset_id
         or manifest.get("version") != version
     ):
@@ -207,4 +227,9 @@ def load_release(
             raise ValueError(f"Dataset row count mismatch: {split}")
         splits[split] = rows
     _validate_rows(splits, manifest["reference_schema"])
+    if manifest["schema_version"] == 2:
+        load_image_assets(directory, manifest.get("assets"))
+    elif "assets" in manifest:
+        raise ValueError("Image assets require dataset schema version 2")
+    validate_image_references(splits, manifest.get("assets", {}))
     return manifest, splits

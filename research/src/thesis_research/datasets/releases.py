@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from thesis_datasets.releases import load_release
+from thesis_datasets.images import ImageAsset
+from thesis_datasets.releases import load_release, release_directory
 
 from thesis_research.datasets.types import (
     ChoiceReference,
@@ -20,6 +21,7 @@ def load_dataset_release(
     root: Path, dataset_id: str, revision: str, version: str, split: str
 ) -> PreparedDataset:
     manifest, splits = load_release(root, dataset_id, version, source_revision=revision)
+    directory = release_directory(root, dataset_id, version)
     if split not in splits:
         raise ValueError(f"Dataset {dataset_id} split must be one of {list(splits)}")
     schema = manifest["reference_schema"]
@@ -40,6 +42,11 @@ def load_dataset_release(
         ),
         reference_schema=reference_schema,
         manifest=manifest,
+        # load_release already verified every pixel file; retain its portable records.
+        image_assets={
+            asset_id: ImageAsset.from_manifest(directory, record)
+            for asset_id, record in manifest.get("assets", {}).items()
+        },
     )
 
 

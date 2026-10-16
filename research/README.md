@@ -90,7 +90,7 @@ preserved. All routes use the existing client, TypeSafe SDK, and `AI_GATEWAY_API
 
 The five additions are Microsoft Decision-1 (Gateway release 2026-10-09), ScaleDown Classify-1
 (2026-10-13), Perplexity Decider v1.1 27B (2026-10-14), Liquid d1 Ultra and Jev 1.14.0
-(both 2026-10-15). These additions use the current text-only task inputs and existing Choice,
+(both 2026-10-15). The checked-in smoke plans use text-only task inputs and existing Choice,
 Noul, and Score questions. The unversioned `typesafe-ai/jev` route remains the existing baseline;
 `jev-1-14-0` is a separate local ID for the explicitly pinned release. The alias may resolve to
 the same version, so this alone does not establish an old-versus-new Jev comparison.
@@ -99,6 +99,58 @@ the same version, so this alone does not establish an old-versus-new Jev compari
 TypeSafe SDK, endpoint, and `AI_GATEWAY_API_KEY`; no direct OpenAI client or additional credential
 is needed. Per-question refusals are recorded as `ModelRefusal` errors, retaining other successful
 answers, billed usage, cost, and raw diagnostics. Refusals do not trigger retries.
+
+### Images with the existing question types
+
+Image tasks use `[state.images]` alongside optional `[state.fields]` text mappings and must pin a
+published dataset release. Images stay in the shared dataset project, with their exact bytes,
+checksums, dimensions, and preparation provenance frozen in the release. Every participant sees
+the same files. Targets remain ordinary Choice labels, Noul booleans, or Score levels, so the
+current metrics and reports apply. See [Image state](CONFIGURATION.md#image-state) for TOML and
+input limits, and [Image releases](../datasets/README.md#image-releases) for publishing data.
+
+The initial image support is restricted to these exact hosted routes:
+
+| Backend | Model | Provider | Image transport evidence |
+| --- | --- | --- | --- |
+| System One | `typesafe-ai/jev-1.14.0` | `typesafe-ai` | Live Noul check, including opposite-color inputs |
+| System One | `openai/gpt-6-luna-decisions` | `openai` | Live Noul check |
+| LLM | `openai/gpt-5.6-luna` | `openai` | Catalog vision support and offline transport tests |
+| LLM | `google/gemini-2.5-flash-lite` | `google` | Catalog vision support and offline transport tests |
+| LLM | `alibaba/qwen3.5-flash` | `alibaba` | Catalog vision support and offline transport tests |
+
+System One images use TypeSafe's JSON `assets` map and
+`TypeSafe-Danger-Zone-Images: true`. The SDK's existing `extra_body` and `extra_headers` support
+carry those fields without adding a new question type. LLM images use labeled `image_url`
+message parts with explicit `detail = "auto"`, alongside the same structured-output schema.
+Image encoding contributes to end-to-end decision latency and happens before provider-call
+timing for both clients. Per-evaluation image data is isolated across concurrent requests.
+
+The image preflight rejects the entire plan if any participant has unsupported or unverified
+image transport; it does not skip models, drop pictures, or substitute text. The default Jev
+alias and self-hosted services need separate verification. Liquid d1, d1 Ultra, and Perplexity
+advertise image-capable models, but the tested TypeSafe asset encoding returned HTTP 422, 422,
+and 400 respectively; those image routes remain blocked while their text routes remain available.
+Laya, Microsoft Decision-1, ScaleDown, and unknown routes are also blocked for images.
+
+Run a non-billable preflight before a new image benchmark (or any existing text plan):
+
+```sh
+uv run thesis-research validate --plan path/to/benchmark.toml
+```
+
+It checks the model set, dataset files and images, task mappings, and cohort without credentials
+or output creation. Benchmark execution repeats the image checks automatically and records a
+capability snapshot. Resume checks image bytes and the saved capability snapshot before calling
+unfinished IDs. The first implementation accepts images in state only and retains exactly one
+Choice/Noul/Score question per task. Box remains unsupported.
+
+Saved synthetic-image connectivity checks under `outputs/validation/images/` used 10 HTTP
+attempts on 2026-10-15, with retries disabled. Jev 1.14 returned `P(red) = 0.98` for a red-square
+image and `0.01` for a blue-square image; GPT-6 Luna Decisions accepted the red-square request.
+The other attempts preserve missing-header and provider-encoding failures. These are transport
+checks, not model-quality results or a published image benchmark dataset. A real image dataset
+and its final task prompt still need to be selected and frozen.
 
 ### Local and other self-hosted System One services
 
@@ -492,11 +544,12 @@ The responses, frozen inputs, usage, routing, errors, and source provenance are 
 under `outputs/validation/openai-decisions/`. These checks confirm account access and request
 compatibility, not comparative quality. Refusal handling was verified with offline HTTP fixtures.
 
-The five routes added on 2026-10-15 have offline HTTP-fixture coverage for provider pinning,
+The five routes added on 2026-10-15 have offline text HTTP-fixture coverage for provider pinning,
 unchanged shared state and all 77 Choice options, Choice/Noul/Score decoding, raw usage and cost,
 refusals, and transient failures. Their catalog and provider entries were checked with public
-read-only requests. No live inference was run for these additions; account access, provider
-input limits, and full BANKING77 compatibility still need the training smoke checks above.
+read-only requests. The later image connectivity checks above cover Jev 1.14 and preserve failed
+Liquid/Perplexity image encodings; they do not establish full BANKING77 compatibility or limits.
+The training smoke checks above remain the appropriate task-specific validation.
 
 `banking77-timing-pilot.toml` is a separate training-only timing-method check using 10 random
 examples. It runs models and examples sequentially and measures every selected example, including

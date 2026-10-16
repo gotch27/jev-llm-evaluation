@@ -107,7 +107,14 @@ async def predict_examples(
         batch = examples[offset : offset + max_concurrency]
         states = [task.build_state(example.state) for example in batch]
         pending = [
-            asyncio.create_task(client.evaluate(state, task.questions())) for state in states
+            asyncio.create_task(
+                client.evaluate(
+                    state,
+                    task.questions(),
+                    **({"images": task.image_inputs(state)} if task.image_fields else {}),
+                )
+            )
+            for state in states
         ]
         try:
             results = await asyncio.gather(*pending)

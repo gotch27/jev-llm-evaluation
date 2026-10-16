@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import os
 import re
@@ -28,6 +29,14 @@ from thesis_research.clients.contracts import (
     unique_non_null,
 )
 from thesis_research.clients.gateway_metadata import reported_cost, resolved_provider
+from thesis_research.images import (
+    IMAGE_HEADERS,
+    IMAGE_REQUEST_LIMIT_BYTES,
+    ImageInputs,
+    image_capability,
+    typesafe_image_body,
+    validate_image_request,
+)
 
 VERCEL_TYPESAFE_BASE_URL = "https://ai-gateway.vercel.sh/typesafe"
 
@@ -72,6 +81,7 @@ class TypeSafeHTTPDecisionClient(DecisionClient):
             max_concurrency=max_concurrency,
             timeout_seconds=timeout_seconds,
             retry=retry or RetryPolicy(timeout=timeout_seconds),
+            transport_kind="self_hosted",
             extra_body=None,
             _client=_client,
             _transport=_transport,
@@ -87,6 +97,7 @@ class TypeSafeHTTPDecisionClient(DecisionClient):
         max_concurrency: int,
         timeout_seconds: float,
         retry: RetryPolicy,
+        transport_kind: str,
         extra_body: dict[str, Any] | None,
         _client: AsyncTypeSafeClient | Any | None,
         _transport: httpx2.AsyncBaseTransport | None,
@@ -103,6 +114,7 @@ class TypeSafeHTTPDecisionClient(DecisionClient):
             raise ValueError("Supply only one of _client or _transport")
         self._authenticated = api_key is not None
         self._extra_body = extra_body
+        self._transport_kind = transport_kind
         self._attempts: ContextVar[_RequestAttempts | None] = ContextVar(
             "system_one_request_attempts", default=None
         )
@@ -131,7 +143,9 @@ class TypeSafeHTTPDecisionClient(DecisionClient):
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._closed = False
 
-    async def evaluate(self, state: JSONContent, questions: Questions) -> DecisionResult:
+    async def evaluate(
+        self, state: JSONContent, questions: Questions, *, images: ImageInputs | None = None
+    ) -> DecisionResult:
         """Evaluate all supplied questions in one bounded System One request.
 
         Provider failures become per-question errors in the returned result so
@@ -140,6 +154,7 @@ class TypeSafeHTTPDecisionClient(DecisionClient):
         Args:
             state: JSON-compatible information the questions refer to.
             questions: TypeSafe questions keyed by stable question ID.
+            images: Verified image assets keyed by top-level state field.
 
         Returns:
             Typed answers, errors, usage, latency, and the raw call record.
@@ -153,6 +168,30 @@ class TypeSafeHTTPDecisionClient(DecisionClient):
         if not questions:
             raise ValueError("At least one question is required")
         started = time.perf_counter()
+        extra_body = self._extra_body
+        image_options = {}
+        if images:
+            image_capability(
+                "system_one", self.requested_model, self.requested_provider, self._transport_kind
+            )
+            validate_image_request(state, questions, images)
+            state, assets = typesafe_image_body(state, images)
+            extra_body = {**(extra_body or {}), "assets": assets}
+            image_options["extra_headers"] = IMAGE_HEADERS
+            body = {
+                "model": self.requested_model,
+                "state": state,
+                "questions": {
+                    key: question.model_dump(mode="json", exclude_none=True)
+                    for key, question in questions.items()
+                },
+                **extra_body,
+            }
+            if (
+                len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
+                > IMAGE_REQUEST_LIMIT_BYTES
+            ):
+                raise ValueError("Encoded image request exceeds 32 MiB")
         async with self._semaphore:
             call_started = time.perf_counter()
             attempts = _RequestAttempts()
@@ -164,7 +203,8 @@ class TypeSafeHTTPDecisionClient(DecisionClient):
                     model=self.requested_model,
                     retry=self._retry,
                     timeout=self._timeout_seconds,
-                    extra_body=self._extra_body,
+                    extra_body=extra_body,
+                    **image_options,
                 )
             except TypeSafeError as error:
                 latency = time.perf_counter() - call_started
@@ -280,6 +320,7 @@ class VercelSystemOneDecisionClient(TypeSafeHTTPDecisionClient):
             max_concurrency=max_concurrency,
             timeout_seconds=timeout_seconds,
             retry=retry or RetryPolicy(),
+            transport_kind="vercel",
             extra_body={"providerOptions": {"gateway": {"only": [provider]}}},
             _client=_client,
             _transport=_transport,

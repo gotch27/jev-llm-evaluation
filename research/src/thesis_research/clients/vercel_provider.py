@@ -1,5 +1,6 @@
 """Strict Vercel AI Gateway transport used by the System One adapter."""
 
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -66,6 +67,7 @@ class VercelGatewayProvider(AsyncOpenAIProvider):
         self.provider_name = provider_name
         self.reasoning_effort = reasoning_effort
         self.api = "chat_completions"
+        self.image_parts: ContextVar[list[dict] | None] = ContextVar("image_parts", default=None)
         self._client = _client or openai.AsyncOpenAI(
             api_key=api_key,
             base_url=VERCEL_AI_GATEWAY_BASE_URL,
@@ -114,6 +116,18 @@ class VercelGatewayProvider(AsyncOpenAIProvider):
             },
             "extra_body": extra_body,
         }
+        image_parts = self.image_parts.get()
+        if image_parts:
+            user_messages = [
+                message for message in request["messages"] if message["role"] == "user"
+            ]
+            if not user_messages:
+                raise ValueError("Image requests require a user message")
+            last = user_messages[-1]
+            last["content"] = [
+                {"type": "text", "text": last["content"]},
+                *image_parts,
+            ]
         with translating(self.translate_error):
             response = await self._client.chat.completions.create(**request)
         raw = response.model_dump(mode="json")

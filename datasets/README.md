@@ -2,7 +2,8 @@
 
 This folder owns data preparation and frozen datasets consumed by benchmarking and remote
 fine-tuning. The `thesis-datasets` package uses Python 3.12 and has no model SDK, inference, or
-training dependencies. Its optional `parquet` extra reads BoolQ's original files. Research depends
+training dependencies. Its optional `parquet` extra reads BoolQ's original files; `images` adds
+Pillow for verifying image releases. Research depends
 on this local package; model serving remains independent.
 
 ## Layout and identity
@@ -45,6 +46,45 @@ Each UTF-8 JSONL record contains:
 `{"type":"score","level":0}`. Score levels are zero-based and the manifest declares their
 ordered descriptions. Original labels, source row positions, duplicate groups, translation
 details, and review flags remain in `metadata`; they are not sent by the benchmark.
+
+### Image releases
+
+Image inputs retain the same Choice, Noul, and Score targets. A top-level input field references
+an asset, for example `"photo": {"type": "image", "asset": "photo-42"}`. Publish prepared image
+files through the existing Python publisher, with `image_assets` mapping these IDs to local paths:
+
+```python
+from pathlib import Path
+from thesis_datasets.releases import publish_release
+
+rows = {"train": [{
+    "id": "train:42", "split": "train",
+    "inputs": {"photo": {"type": "image", "asset": "photo-42"}},
+    "target": {"type": "noul", "value": True},
+    "metadata": {},
+}]}
+release = publish_release(
+    Path("."), "my-images", "immutable-source-revision", rows,
+    {"type": "noul"}, {"preparation": "original upright PNG pixels"},
+    image_assets={"photo-42": Path("source/photo-42.png")},
+)
+print(release.name)  # Pin this full version in the research task.
+```
+
+Replace the illustrative source revision, image, labels, and preparation provenance with the
+selected dataset's actual values. Run from `datasets/` using `uv run --extra images python`.
+Image releases use schema version 2 and copy exact image bytes into `assets/<sha256>.png` or
+`.jpg`. Their manifest records hashes, byte sizes, formats, and dimensions. Each referenced image
+must exist; unused assets and malformed references are rejected. A change to pixels changes the
+release version. Original IDs, targets, ordering, and splits remain unchanged. Existing text
+releases retain schema version 1 and their original identities.
+
+The publisher verifies decoding and accepts still PNG/JPEG files with upright pixels. It never
+resizes, rotates, re-encodes, or downloads an image. Prepare any transformations explicitly and
+record them in provenance before publishing. Loading verifies every asset and rejects modified
+files, inconsistent metadata, and paths escaping the release. Copy the entire release, including
+`assets/`, when moving data to another machine. The benchmark separately checks its shared
+image size limits and the compatibility of every selected model route.
 
 Yelp's existing 70/10/10/10 train/validation/calibration/test assignment is preserved. Original
 test reviews stay in test. SNIPS retains its original `train`/`heldout` assignment; `heldout` came
@@ -181,8 +221,8 @@ and supported.
 
 ```sh
 cd datasets
-uv sync --locked --extra parquet
-uv run pytest
+uv sync --locked --extra parquet --extra images
+uv run --extra parquet --extra images pytest
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv build

@@ -26,6 +26,7 @@ from thesis_research.benchmark.progress import BenchmarkObserver, NullBenchmarkO
 from thesis_research.benchmark.report import generate_report, report_artifacts
 from thesis_research.benchmark.timing import runner_environment
 from thesis_research.benchmark.types import BenchmarkPlan
+from thesis_research.benchmark.validation import validate_image_models, validate_task_images
 from thesis_research.clients import DecisionClient
 from thesis_research.config import load_task_config
 from thesis_research.datasets import (
@@ -59,7 +60,8 @@ async def run_benchmark(
     plan = load_benchmark_plan(plan_path)
     plan_bytes = plan_path.read_bytes()
     task_bytes = plan.task_config.read_bytes()
-    load_task_config(plan.task_config)
+    config = load_task_config(plan.task_config)
+    image_profiles = validate_image_models(plan, config)
 
     run, timestamp = create_run_directory(outputs)
     (run / "plan.toml").write_bytes(plan_bytes)
@@ -81,6 +83,8 @@ async def run_benchmark(
             "task.toml": {"sha256": sha256_bytes(task_bytes)},
         },
     }
+    if image_profiles:
+        metadata["image_capabilities"] = image_profiles
     write_json(run / "metadata.json", metadata)
     try:
         config = load_task_config(run / "task.toml")
@@ -91,8 +95,11 @@ async def run_benchmark(
             plan.cohort.split,
             version=config.dataset.version,
         )
-        task = build_structured_task(config, prepared.reference_schema)
+        task = build_structured_task(
+            config, prepared.reference_schema, image_assets=prepared.image_assets
+        )
         task.validate_state_fields(prepared.examples)
+        validate_task_images(task, prepared.examples)
         examples = select_cohort(prepared.examples, prepared.reference_schema, plan.cohort)
         write_json(
             run / "cohort.json",
@@ -162,6 +169,9 @@ async def resume_benchmark(
         if (run / "report/index.html").exists():
             observer.visualization_completed(run / "report/index.html")
         return run
+    image_profiles = validate_image_models(plan, config)
+    if image_profiles and metadata.get("image_capabilities") != image_profiles:
+        raise ValueError("Saved image capabilities differ from this implementation")
     prepared = load_prepared_dataset(
         data,
         config.dataset.id,
@@ -169,8 +179,11 @@ async def resume_benchmark(
         plan.cohort.split,
         version=config.dataset.version,
     )
-    task = build_structured_task(config, prepared.reference_schema)
+    task = build_structured_task(
+        config, prepared.reference_schema, image_assets=prepared.image_assets
+    )
     task.validate_state_fields(prepared.examples)
+    validate_task_images(task, prepared.examples)
     examples = examples_from_cohort(
         json.loads((run / "cohort.json").read_text(encoding="utf-8")),
         prepared.examples,

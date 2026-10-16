@@ -1566,13 +1566,19 @@ version = "0.1.0"
 source = { editable = "../datasets" }
 
 [package.optional-dependencies]
+images = [
+    { name = "pillow" },
+]
 parquet = [
     { name = "pyarrow" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyarrow", marker = "extra == 'parquet'", specifier = ">=25,<26" }]
-provides-extras = ["parquet"]
+requires-dist = [
+    { name = "pillow", marker = "extra == 'images'", specifier = ">=12,<13" },
+    { name = "pyarrow", marker = "extra == 'parquet'", specifier = ">=25,<26" },
+]
+provides-extras = ["parquet", "images"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1590,7 +1596,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "system-one-adapter", extra = ["openai"] },
-    { name = "thesis-datasets", extra = ["parquet"] },
+    { name = "thesis-datasets", extra = ["images", "parquet"] },
     { name = "typesafe-sdk" },
 ]
 
@@ -1614,7 +1620,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.1,<2" },
     { name = "rich", specifier = ">=14,<15" },
     { name = "system-one-adapter", extras = ["openai"], specifier = ">=0.2,<0.3" },
-    { name = "thesis-datasets", extras = ["parquet"], editable = "../datasets" },
+    { name = "thesis-datasets", extras = ["images", "parquet"], editable = "../datasets" },
     { name = "typesafe-sdk", specifier = ">=0.7,<0.8" },
 ]
 
